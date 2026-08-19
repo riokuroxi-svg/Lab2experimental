@@ -10,7 +10,7 @@
 
 <img src="https://img.shields.io/badge/Status-Laboratorio-FBBF24?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/WhatsApp-Bot-25D366?style=for-the-badge&logo=whatsapp&logoColor=white"/>
-<img src="https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white"/>
+<img src="https://img.shields.io/badge/Node.js-22.5%2B-339933?style=for-the-badge&logo=nodedotjs&logoColor=white"/>
 <img src="https://img.shields.io/badge/Baileys-Multi%20Device-25D366?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/Inestable-Pruebas-F87171?style=for-the-badge"/>
 
@@ -41,6 +41,32 @@
 | Quieres probar las funciones más nuevas | Quieres algo que no se rompa |
 | Te gusta ayudar a reportar bugs | No quieres lidiar con errores |
 | Quieres aportar ideas/código | Es tu primera vez instalando el bot |
+
+<img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a139a6edaec5c.gif" width="100%"/>
+
+## 🧬 Cambios en esta versión (Lab2experimental)
+
+> 🚀 Lo nuevo de esta rama de laboratorio:
+
+| Cambio | Detalle |
+|:---|:---|
+| ⚡ **Nuevo comando `.ytdlp`** | Motor de descargas **local con yt-dlp** (compatible con +1000 sitios). Modos: `video` (720p), `audio` (m4a nativo turbo, sin conversión), `mp3` (320k) y `fast` (ligero). Caché de 24 h, bypass del throttling de YouTube y 8 fragmentos en paralelo. |
+| 🔄 **Auto-update integrado** | El bot actualiza yt-dlp solo cada 24 h (canal *nightly*, fixes diarios de YouTube). Con `YTDLP_PLUGIN_URL` en `.env`, el plugin también se auto-reemplaza desde el repo. **Cero mantenimiento.** |
+| 🛡️ **Requisito de Node corregido** | `engines` actualizado a **Node ≥ 22.5** (el bot usa `node:sqlite`; con Node 20 crashea al arrancar). |
+| 🧰 **Extras** | `.env.example` extendido (`YTDLP_PATH`, `YTDLP_CHANNEL`, `YTDLP_AUTO_UPDATE`, `YTDLP_PLUGIN_URL`) y carpeta `docs/` con guías de instalación e integración. |
+
+### ⚡ Uso rápido
+
+```
+.ytdlp https://youtu.be/xxxx          → video 720p
+.ytdlp https://youtu.be/xxxx audio    → canción m4a turbo ⚡
+.ytdlp https://youtu.be/xxxx mp3      → mp3 320k
+.ytdlp https://youtu.be/xxxx fast     → m4a ligero
+```
+
+**Requisitos del host:** Node ≥ 22.5 · `pip install -U --pre "yt-dlp[default]"` · `apt install ffmpeg` (solo para el modo mp3).
+
+> 📚 Detalles completos en [`docs/YTDLP-INSTALACION.md`](docs/YTDLP-INSTALACION.md) y [`docs/GUIA-INTEGRACION.md`](docs/GUIA-INTEGRACION.md).
 
 <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a139a6edaec5c.gif" width="100%"/>
 
