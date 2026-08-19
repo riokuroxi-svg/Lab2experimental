@@ -1,11 +1,11 @@
 import { proto, delay, areJidsSameUser, generateWAMessage, generateWAMessageFromContent, generateWAMessageContent, prepareWAMessageMedia, downloadContentFromMessage, getContentType, getDevice, extractMessageContent, jidDecode } from 'baileys';
 import fs from 'fs';
-import axios from 'axios';
 import crypto from 'crypto';
 import FileType from 'file-type';
 import path from 'path';
 import exif from './exif.js';
 import db from '#db';
+import { fastFetch } from '#lib/fastFetch';
 import { fileURLToPath } from 'url';
 import GraphemeSplitter from 'grapheme-splitter';
 
@@ -182,8 +182,13 @@ export { normalizeJid, resolveParticipantJid, resolveJidSync, patchGroupMetadata
 
 export async function getBuffer(url, options = {}) {
   try {
-    const res = await axios({ method: 'get', url, headers: { DNT: 1, 'Upgrade-Insecure-Request': 1 }, responseType: 'arraybuffer', timeout: 30_000, ...options });
-    return res.data;
+    const { timeout = 15000, headers = {}, ...rest } = options;
+    const res = await fastFetch(url, {
+      timeout,
+      headers: { DNT: '1', 'Upgrade-Insecure-Request': '1', ...headers },
+      ...rest
+    });
+    return Buffer.from(await res.arrayBuffer());
   } catch (e) { throw e; }
 }
 
@@ -337,10 +342,13 @@ export async function smsg(sock, msg, store) {
     } else if (typeof content === 'string') {
       try {
         if (/^https?:\/\//.test(content)) {
-          const data = await axios.get(content, { responseType: 'arraybuffer' });
-          const mime = data.headers['content-type'] || (await FileType.fromBuffer(data.data)).mime;
-          if (/gif|image|video|audio|pdf|stream/i.test(mime)) {
-            return sock.sendMedia(chat, data.data, '', caption, quoted, content);
+          const res = await fastFetch(content, { timeout: 10000 });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = Buffer.from(await res.arrayBuffer());
+          const type = await FileType.fromBuffer(data);
+          const mime = res.headers.get('content-type') || type?.mime;
+          if (/gif|image|video|audio|pdf|stream/i.test(mime || '')) {
+            return sock.sendFile(chat, data, 'file', caption, quoted);
           } else {
             return sock.sendMessage(chat, { text: content, mentions, ...options }, { quoted, ephemeralExpiration });
           }

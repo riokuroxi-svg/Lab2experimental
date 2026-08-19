@@ -1,9 +1,16 @@
-import axios from 'axios';
+import { fastFetch } from '#lib/fastFetch';
 import { promises as fs } from 'fs';
 import db from '#db';
 
 const FILE_PATH = './core/characters.json';
 const rollLocks = new Map();
+
+// Cache en memoria de personajes (leer disco UNA SOLA VEZ, no cada vez que se usa el comando)
+let charactersCache = null;
+let charactersCacheTime = 0;
+let lastMtime = 0;
+const CHARACTERS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 function cleanOldLocks() {
   const now = Date.now();
   for (const [userId, lockTime] of rollLocks.entries()) {
@@ -12,10 +19,27 @@ function cleanOldLocks() {
 }
 
 async function loadCharacters() {
-  try { await fs.access(FILE_PATH); } catch { await fs.writeFile(FILE_PATH, '{}'); }
-  const raw = await fs.readFile(FILE_PATH, 'utf-8');
-  return JSON.parse(raw);
+  try {
+    const stat = await fs.stat(FILE_PATH);
+    const now = Date.now();
+    // Usar caché si el archivo no cambió y no expiró
+    if (charactersCache && stat.mtimeMs === lastMtime && now - charactersCacheTime < CHARACTERS_CACHE_TTL) {
+      return charactersCache;
+    }
+    const raw = await fs.readFile(FILE_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    charactersCache = parsed;
+    charactersCacheTime = now;
+    lastMtime = stat.mtimeMs;
+    return parsed;
+  } catch (e) {
+    await fs.writeFile(FILE_PATH, '{}');
+    return {};
+  }
 }
+
+// Precalentar caché al cargar el comando
+loadCharacters().catch(() => {});
 
 function flattenCharacters(chars) {
   return Object.values(chars).flatMap(s => Array.isArray(s.characters) ? s.characters : []);
@@ -38,19 +62,37 @@ function getRefererForUrl(url) {
 
 async function buscarImagenDelirius(tag) {
   const query = formatTag(tag);
-  const urls = [`https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&tags=${query}`, `https://danbooru.donmai.us/posts.json?tags=${query}`, `https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&tags=${query}&api_key=98f554258c88c44f4dd28ccde0c28f36682b2a992490ab35ebcc7baf7e196a86d7550b174bce577b8cc3f544e9b3ad0f6aeb09ad63bf89a9141cc3eddb6fbfd2&user_id=1917269`];
-  for (const url of urls) {
+  const urls = [
+    `https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&tags=${query}`,
+    `https://danbooru.donmai.us/posts.json?tags=${query}`,
+    `https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&tags=${query}&api_key=98f554258c88c44f4dd28ccde0c28f36682b2a992490ab35ebcc7baf7e196a86d7550b174bce577b8cc3f544e9b3ad0f6aeb09ad63bf89a9141cc3eddb6fbfd2&user_id=1917269`
+  ];
+  
+  // BUSCAR EN LAS 3 FUENTES EN PARALELO (no esperar que termine una para probar la otra)
+  const results = await Promise.allSettled(urls.map(async (url) => {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+      const res = await fastFetch(url, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      });
       const type = res.headers.get('content-type') || '';
-      if (!res.ok || !type.includes('json')) continue;
+      if (!res.ok || !type.includes('json')) return [];
       const json = await res.json();
       const data = Array.isArray(json) ? json : json?.post || json?.data || [];
-      const valid = data.map(i => i?.file_url || i?.large_file_url || i?.image || i?.media_asset?.variants?.[0]?.url).filter(u => typeof u === 'string' && /\.(jpe?g|png)$/.test(u));
-      if (valid.length) return valid;
-    } catch {}
+      return data.map(i => i?.file_url || i?.large_file_url || i?.image || i?.media_asset?.variants?.[0]?.url).filter(u => typeof u === 'string' && /\.(jpe?g|png)$/.test(u));
+    } catch {
+      return [];
+    }
+  }));
+  
+  // Juntar todos los resultados válidos
+  const allUrls = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+      allUrls.push(...r.value);
+    }
   }
-  return [];
+  return allUrls;
 }
 
 export default {
@@ -86,17 +128,26 @@ export default {
       return msg.reply(`ꕥ Debes esperar *${timeText.trim()}* para usar *${usedPrefix + 'rw'}* de nuevo.`);
     }
     rollLocks.set(userId, now);
+    
+    // Reaccionar INMEDIATAMENTE para que el usuario vea que el bot respondió
+    try { await sock.sendMessage(chatId, { react: { text: '🎲', key: msg.key } }); } catch {}
+    
     try {
+      // Cargar personajes del caché (no lee disco si ya está cargado)
       const chars = await loadCharacters();
       const all = flattenCharacters(chars);
       const selected = all[Math.floor(Math.random() * all.length)];
       const id = String(selected.id);
       const source = getSeriesNameByCharacter(chars, selected.id);
       const baseTag = formatTag(selected.tags?.[0] || '');
+      
+      // Buscar imágenes en paralelo
       const mediaList = await buscarImagenDelirius(baseTag);
-      const media = mediaList[Math.floor(Math.random() * mediaList.length)];
+      const media = mediaList.length > 0 ? mediaList[Math.floor(Math.random() * mediaList.length)] : null;
+      
       if (!media) {
         rollLocks.delete(userId);
+        try { await sock.sendMessage(chatId, { react: { text: '❌', key: msg.key } }); } catch {}
         return msg.reply(`ꕥ No se encontró imágenes para el personaje *${selected.name}*.`);
       }
       const charKey = chatId + '__' + id;
@@ -117,14 +168,27 @@ export default {
       const claimedBy = chatChar?.user || null;
       const owner = claimedBy ? (db.getUser(claimedBy))?.name || claimedBy.split('@')[0] : 'desconocido';
       const caption = `❀ Nombre » *${chatChar.name}*\n⚥ Género » *${selected.gender || 'Desconocido'}*\n✰ Valor » *${chatChar.value.toLocaleString()}*\n♡ Estado » *${claimedBy ? `Reclamado por ${owner}` : 'Libre'}*\n❖ Fuente » *${source}*\u206c`;
-      const imgRes = await axios.get(media, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': getRefererForUrl(media) } });
-      const buffer = Buffer.from(imgRes.data);
+      
+      // Descargar imagen con fastFetch (más rápido con keep-alive)
+      const imgRes = await fastFetch(media, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': getRefererForUrl(media)
+        }
+      });
+      const buffer = Buffer.from(await imgRes.arrayBuffer());
+      
       const sent = await sock.sendMessage(chatId, { image: buffer, caption: caption }, { quoted: msg });
+      
+      if (!chat.rolls) chat.rolls = {};
       chat.rolls[sent.key.id] = { id, charKey, name: chatChar.name, expiresAt: chatChar.expiresAt, reservedBy: userId, reservedUntil: chatChar.reservedUntil };
       db.setChat(chatId, 'rolls', chat.rolls);
       db.setChatUser(chatId, userId, 'lastRoll', now + cooldown);
+      try { await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } }); } catch {}
     } catch (e) {
-      await msg.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*. Please try again or contact support if the issue persists.\n> [Error: *${e.message}*]`);
+      try { await sock.sendMessage(chatId, { react: { text: '❌', key: msg.key } }); } catch {}
+      await msg.reply(`> Ocurrió un error al ejecutar *${usedPrefix + command}*.\n> Error: *${e.message}*`);
     } finally {
       rollLocks.delete(userId);
     }

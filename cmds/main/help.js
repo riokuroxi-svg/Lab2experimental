@@ -9,6 +9,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LOCAL_BANNER = path.resolve(__dirname, '..', '..', 'media', 'menu.jpg');
 
+// Cache del banner en memoria (leer disco UNA SOLA VEZ al iniciar)
+let _bannerCache = null;
+let _bannerMtime = 0;
+function getBannerBuffer() {
+  try {
+    if (!fs.existsSync(LOCAL_BANNER)) return null;
+    const stat = fs.statSync(LOCAL_BANNER);
+    if (_bannerCache && stat.mtimeMs === _bannerMtime) return _bannerCache;
+    _bannerCache = fs.readFileSync(LOCAL_BANNER);
+    _bannerMtime = stat.mtimeMs;
+    return _bannerCache;
+  } catch {
+    return null;
+  }
+}
+// Precalentar al cargar
+getBannerBuffer();
+
 function normalize(text = '') {
   text = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
   return text.endsWith('s') ? text.slice(0, -1) : text;
@@ -48,16 +66,11 @@ export default {
 
       const instagram = (global.links && global.links.instagram) || '';
 
-      // El "botón de canal" (reenviado desde newsletter) aparece si el JID
-      // ya fue resuelto (al conectar el bot llama a resolveChannel que hace
-      // newsletterMetadata(invite, code)). Si no está resuelto aún, intentamos
-      // resolverlo en background pero NO lo usamos para no romper el envío.
       const { resolveChannel, getChannelInfo } = await import('#lib/channel');
       resolveChannel(sock, db).catch(()=>{});
       const chInfo = getChannelInfo();
       let canalId = chInfo.id || botSettings.newsletter_id || '';
       let canalName = (chInfo.resolved ? chInfo.name : '') || botSettings.nameid || '';
-      // Si el JID en la DB es el de yuki (viejo) lo ignoramos
       if (canalId && canalId.includes('120363401404146384')) { canalId = ''; canalName = ''; }
       if (canalName && /yuki|ყµҡเ/i.test(canalName)) { canalName = ''; canalId = ''; }
 
@@ -116,10 +129,6 @@ export default {
 
       const mentioned = [owner, msg.sender].filter(Boolean);
 
-      // ContextInfo seguro:
-      // - El botón "Ver canal" (forwarded newsletter) SOLO se envía en GRUPOS.
-      //   En chats privados (DM/@s.whatsapp.net) WhatsApp a veces no logra descifrar
-      //   el reenvío del canal y muestra "Esperando mensaje. Esto puede tomar tiempo".
       const isGroup = msg.chat.endsWith('@g.us');
       const contextInfo = { mentionedJid: mentioned };
       if (isGroup && canalId && canalName) {
@@ -131,15 +140,23 @@ export default {
         };
       }
 
-      if (banner && fs.existsSync(banner)) {
+      if (banner && (banner === LOCAL_BANNER || fs.existsSync(banner))) {
         const isVideo = /\.(mp4|webm)(\?|$)/i.test(banner);
-        // Leer a Buffer para que Baileys no tenga que resolver rutas locales
-        // en un flujo que a veces WhatsApp interpreta como "cargando" en DMs.
-        const mediaBuffer = fs.readFileSync(banner);
-        const media = isVideo
-          ? { video: mediaBuffer, gifPlayback: true, caption: menu.trim(), contextInfo }
-          : { image: mediaBuffer, caption: menu.trim(), contextInfo };
-        await sock.sendMessage(msg.chat, media, { quoted: msg });
+        // Usar caché para el banner local
+        let mediaBuffer;
+        if (banner === LOCAL_BANNER) {
+          mediaBuffer = getBannerBuffer();
+        } else {
+          mediaBuffer = fs.readFileSync(banner);
+        }
+        if (mediaBuffer) {
+          const media = isVideo
+            ? { video: mediaBuffer, gifPlayback: true, caption: menu.trim(), contextInfo }
+            : { image: mediaBuffer, caption: menu.trim(), contextInfo };
+          await sock.sendMessage(msg.chat, media, { quoted: msg });
+        } else {
+          await sock.sendMessage(msg.chat, { text: menu.trim(), contextInfo }, { quoted: msg });
+        }
       } else {
         await sock.sendMessage(msg.chat, { text: menu.trim(), contextInfo }, { quoted: msg });
       }
