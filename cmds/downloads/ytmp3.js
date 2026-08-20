@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { downloadAudioYtdlp, addCustomCoverToMp3, isMp3Valid } from '#lib/mp3Utils'
+import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -273,9 +273,24 @@ async function ejecutarDescarga(sock, job, modo, m) {
       buffer = ytdlpDisponible ? await descargarAudioYtdlp(job.url,'fast') : (await descargarAudioApi(job.url)).buffer
       if (buffer.length>MAX_MB_AUDIO) throw new Error('Archivo muy grande (>50MB)')
       if (estadoMsg?.key) try { await sock.sendMessage(chat, {delete:estadoMsg.key}) } catch {}
-      let final = buffer
-      try { await sock.sendMessage(chat,{react:{text:'🖼️',key:m.key}}); final=await addCustomCoverToMp3(buffer, sanitizeFilename(job.title)) } catch {}
-      await sock.sendMessage(chat, {[comoDoc?'document':'audio']:final, mimetype:'audio/mpeg', fileName:`${sanitizeFilename(job.title)}.mp3`, ptt:false}, {quoted:m})
+      let finalBuf = buffer
+      let segundos = 0
+      try {
+        await sock.sendMessage(chat,{react:{text:'🖼️',key:m.key}})
+        const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(job.title))
+        finalBuf = procesado.buffer
+        segundos = procesado.seconds || 0
+      } catch (e) { console.log('[play] Error procesando MP3:', e.message) }
+      const audioPayload = {
+        audio: finalBuf,
+        mimetype: 'audio/mpeg',
+        fileName: `${sanitizeFilename(job.title)}.mp3`,
+        ptt: false
+      }
+      if (segundos > 0) audioPayload.seconds = segundos
+      await sock.sendMessage(chat, comoDoc ? {
+        document: finalBuf, mimetype:'audio/mpeg', fileName:`${sanitizeFilename(job.title)}.mp3`
+      } : audioPayload, {quoted:m})
     } else {
       const r = await descargarVideoApi(job.url)
       buffer = r.buffer
@@ -324,9 +339,22 @@ const cmd = {
           const title = info.status==='fulfilled'&&info.value ? info.value.title : 'Audio'
           if (buffer.length>MAX_MB_AUDIO) throw new Error('Muy grande (>50MB)')
           if (estado?.key) try { await sock.sendMessage(msg.chat,{delete:estado.key}) } catch {}
-          let final = buffer
-          try { await sock.sendMessage(msg.chat,{react:{text:'🖼️',key:msg.key}}); final=await addCustomCoverToMp3(buffer, sanitizeFilename(title)) } catch {}
-          await sock.sendMessage(msg.chat,{audio:final,fileName:`${sanitizeFilename(title)}.mp3`,mimetype:'audio/mpeg',ptt:false},{quoted:msg})
+          let finalBuf = buffer
+          let segundos = 0
+          try {
+            await sock.sendMessage(msg.chat,{react:{text:'🖼️',key:msg.key}})
+            const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(title))
+            finalBuf = procesado.buffer
+            segundos = procesado.seconds || 0
+          } catch (e) { console.log('[play] Error procesando MP3:', e.message) }
+          const audioPayload = {
+            audio: finalBuf,
+            fileName: `${sanitizeFilename(title)}.mp3`,
+            mimetype: 'audio/mpeg',
+            ptt: false
+          }
+          if (segundos > 0) audioPayload.seconds = segundos
+          await sock.sendMessage(msg.chat, audioPayload, {quoted:msg})
           try { await sock.sendMessage(msg.chat,{react:{text:'✅',key:msg.key}}) } catch {}
         } catch(e) {
           if (estado?.key) try { await sock.sendMessage(msg.chat,{delete:estado.key}) } catch {}

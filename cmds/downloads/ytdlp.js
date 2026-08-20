@@ -33,7 +33,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 // Usar fetch nativo de Node.js
 const fetch = globalThis.fetch
-import { downloadAudioYtdlp, addCustomCoverToMp3, isMp3Valid } from '#lib/mp3Utils'
+import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -339,21 +339,26 @@ export default {
         (desdeCache ? `\n𖣣ֶㅤ֯⌗ ⚡  ⬭ *Desde caché (instantáneo)*` : '')
 
       if (!esVideo) {
-        // Agregar portada PERSONALIZADA
+        // Procesar MP3 para que WhatsApp lo acepte con portada y nombre correcto
         let audioFinal = buf;
+        let segundos = 0;
         try {
           await msg.react('🖼️');
-          audioFinal = await addCustomCoverToMp3(buf, titulo);
+          const procesado = await processMp3ForWhatsApp(buf, titulo);
+          audioFinal = procesado.buffer;
+          segundos = procesado.seconds || 0;
         } catch (e) {
-          console.log('[ytdlp] Error agregando portada:', e.message);
+          console.log('[ytdlp] Error procesando MP3:', e.message);
         }
         const nombre = `${limpiarNombre(titulo)}.mp3`;
-        await sock.sendMessage(msg.chat, {
+        const payload = {
           audio: audioFinal,
           mimetype: 'audio/mpeg',
           fileName: nombre,
           ptt: false
-        }, { quoted: msg })
+        };
+        if (segundos > 0) payload.seconds = segundos;
+        await sock.sendMessage(msg.chat, payload, { quoted: msg })
         await sock.sendMessage(msg.chat, { text: caption }, { quoted: msg })
       } else if (buf.length <= LIMITE_VIDEO_DIRECTO && esMp4(buf)) {
         await sock.sendMessage(msg.chat, {
