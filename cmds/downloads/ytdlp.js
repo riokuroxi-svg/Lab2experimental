@@ -76,10 +76,12 @@ function esMp4(b) {
 
 async function runYtdlp(args, { maxBuffer = 32 * MB, timeout = 5 * 60 * 1000 } = {}) {
   try {
-    const { stdout } = await exec(YTDLP, args, { maxBuffer, timeout, windowsHide: true })
+    // encoding: 'buffer' para obtener datos binarios correctamente, no como string
+    const { stdout } = await exec(YTDLP, args, { maxBuffer, timeout, windowsHide: true, encoding: 'buffer' })
     return stdout
   } catch (e) {
-    const cola = String(e.stderr || e.message || 'error desconocido')
+    const errText = e.stderr ? String(e.stderr) : String(e.message || 'error desconocido')
+    const cola = errText
       .split('\n').map(l => l.trim()).filter(Boolean).slice(-3)
     throw new Error(cola.join(' | '))
   }
@@ -103,7 +105,7 @@ function limpiarCache() {
   } catch { /* la caché nunca debe tumbar el comando */ }
 }
 
-const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web_embedded']
+const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web,web_embedded', '--no-check-certificates']
 
 // ════════════════════════════════════════════════════════════
 //  AUTO-UPDATE (cero mantenimiento)
@@ -310,25 +312,25 @@ export default {
         ext = 'mp4'
         etiquetaModo = 'VIDEO 720p'
         argsDesc = [
-          '-f', 'bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*[ext=mp4]/b',
+          '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
           '--merge-output-format', 'mp4', ...ARGS_VELOCIDAD
         ]
       } else if (esMp3) {
         ext = 'mp3'
         etiquetaModo = 'MP3 320k'
         argsDesc = [
-          '-f', 'ba', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+          '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--embed-metadata', ...ARGS_VELOCIDAD
         ]
       } else if (esFast) {
         ext = 'm4a'
-        etiquetaModo = 'M4A LIGERO ⚡'
-        // Modo rápido: SIN conversión extra, SIN metadatos ni portada para máxima velocidad
-        argsDesc = ['-f', 'ba[ext=m4a][abr<=96]/ba[ext=m4a]/ba', '--no-embed-metadata', '--no-embed-thumbnail', ...ARGS_VELOCIDAD]
+        etiquetaModo = 'M4A RÁPIDO ⚡'
+        // Formato compatible sin restricciones estrictas que causen error
+        argsDesc = ['-f', 'bestaudio/best', ...ARGS_VELOCIDAD, '--no-embed-metadata', '--no-embed-thumbnail']
       } else {
         ext = 'm4a'
-        etiquetaModo = 'M4A NATIVO'
-        argsDesc = ['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba', '--embed-metadata', ...ARGS_VELOCIDAD]
+        etiquetaModo = 'M4A'
+        argsDesc = ['-f', 'bestaudio[ext=m4a]/bestaudio/best', '--embed-metadata', ...ARGS_VELOCIDAD]
       }
 
       // 3) Caché
@@ -343,13 +345,22 @@ export default {
         } catch { buf = null }
       }
 
-      // 4) Descargar si no estaba en caché (marcamos "busy" para que el
-      //    auto-updater se posponga durante la descarga)
+      // 4) Descargar si no estaba en caché
       if (!desdeCache) {
         global.__ytdlpBusy = true
         try {
           const maxBuf = (esVideo ? MAX_MB_VIDEO : MAX_MB_AUDIO) * MB
-          buf = await runYtdlp([...argsDesc, '-o', '-', '--', url], { maxBuffer: maxBuf, timeout: 12 * 60 * 1000 })
+          // Intentar la descarga, si falla usar fallback genérico
+          try {
+            buf = await runYtdlp([...argsDesc, '-o', '-', '--', url], { maxBuffer: maxBuf, timeout: 12 * 60 * 1000 })
+          } catch (primerError) {
+            console.log('[ytdlp] Formato falló, usando fallback genérico')
+            // Fallback: el mejor formato disponible sin restricciones
+            const fallbackArgs = esVideo
+              ? ['-f', 'best', ...ARGS_VELOCIDAD, '-o', '-', '--', url]
+              : ['-f', 'bestaudio/best', '-x' , ...ARGS_VELOCIDAD, '-o', '-', '--', url]
+            buf = await runYtdlp(fallbackArgs, { maxBuffer: maxBuf, timeout: 12 * 60 * 1000 })
+          }
           if (!buf || buf.length < 1024) throw new Error('El archivo descargado está vacío')
           try { fs.writeFileSync(rutaCache, buf) } catch { /* sin caché, no pasa nada */ }
         } finally {

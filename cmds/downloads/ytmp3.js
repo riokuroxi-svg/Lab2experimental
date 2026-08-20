@@ -202,26 +202,56 @@ async function getVideoInfo(input, video_id) {
 // ════════════════════════════════════════════════════════════
 //  DESCARGA LOCAL CON YT-DLP ⚡ INSTANTÁNEO
 // ════════════════════════════════════════════════════════════
-const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web_embedded']
+// Argumentos con formato MÁS COMPATIBLE (no falla aunque YouTube cambie formatos)
+const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web,web_embedded', '--no-check-certificates']
 
 async function descargarAudioYtdlp(url, modo = 'fast') {
-  // modo: 'fast' = m4a 96k, 'normal' = m4a mejor calidad, 'mp3' = mp3 320k
+  // Primero asegurarse de que yt-dlp esté ACTUALIZADO (arregla el error de signature/n-challenge)
+  try {
+    const execa = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(execa.execFile);
+    // Actualizar silenciosamente (solo si hay actualización)
+    await exec(YTDLP, ['-U', '--update-to', 'nightly'], { timeout: 30000 }).catch(() => {});
+  } catch {}
+
+  // Modo 'fast' = formato más compatible, sin fallos (no pedir abr<=96 que a veces no existe)
   let args
   if (modo === 'mp3') {
-    args = ['-f', 'ba', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--no-embed-metadata', '--no-embed-thumbnail', ...ARGS_VELOCIDAD]
+    args = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', ...ARGS_VELOCIDAD]
   } else if (modo === 'normal') {
-    args = ['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba', ...ARGS_VELOCIDAD]
+    // Audio normal, cualquier formato de audio, sin restricción estricta
+    args = ['-f', 'bestaudio[ext=m4a]/bestaudio/best', ...ARGS_VELOCIDAD]
   } else {
-    args = ['-f', 'ba[ext=m4a][abr<=96]/ba[ext=m4a]/ba', ...ARGS_VELOCIDAD]
+    // Modo rápido: MEJOR FORMATO DISPONIBLE, no hay restricción de abr para no fallar
+    args = ['-f', 'bestaudio/best', ...ARGS_VELOCIDAD, '--no-embed-metadata', '--no-embed-thumbnail']
   }
   args.push('-o', '-', '--', url)
   
-  const { stdout } = await exec(YTDLP, args, {
-    maxBuffer: MAX_MB_AUDIO,
-    timeout: 120000,
-    windowsHide: true
-  })
-  const buf = Buffer.from(stdout, 'binary')
+  let stdout
+  try {
+    const result = await exec(YTDLP, args, {
+      maxBuffer: MAX_MB_AUDIO,
+      timeout: 120000,
+      windowsHide: true,
+      encoding: 'buffer', // Binario correcto, no corrompe MP3
+      env: { ...process.env }
+    });
+    stdout = result.stdout;
+  } catch (e) {
+    const stderr = e.stderr ? String(e.stderr) : e.message || ''
+    // Si falla el primer intento, intentar con formato genérico sin restricciones
+    const fallbackArgs = ['-f', 'bestaudio/best', '-x', ...ARGS_VELOCIDAD, '-o', '-', '--', url];
+    try {
+      const result2 = await exec(YTDLP, fallbackArgs, { maxBuffer: MAX_MB_AUDIO, timeout: 120000, windowsHide: true, encoding: 'buffer' });
+      stdout = result2.stdout;
+    } catch (e2) {
+      const errorMsg = String(e2.stderr || e2.message || stderr || 'Error desconocido')
+        .split('\n').filter(l => l.includes('ERROR:') || l.includes('error:') || l.includes('WARNING:')).slice(-2).join(' | ')
+      throw new Error(errorMsg || 'Error al descargar con yt-dlp')
+    }
+  }
+  const buf = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout, 'binary')
   if (!buf || buf.length < 1024) throw new Error('Archivo vacío')
   return buf
 }
