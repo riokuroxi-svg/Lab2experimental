@@ -148,6 +148,36 @@ export default async (sock, msg) => {
     await sock.readMessages([msg.key]);
     return msg.reply(`ꕤ El comando *${command}* no existe.\n✎ Usa *${usedPrefix}help* para ver la lista de comandos disponibles.`);
   }
+
+  // ── Sistema de permisos centralizado (compatible con permisos viejos) ──
+  // Soporta tanto los flags viejos (isOwner/isAdmin/botAdmin) como los nuevos
+  // declarativos (ownerOnly/modOnly/adminOnly/premiumOnly/groupOnly/privateOnly/botAdmin)
+  const isMod = isOwner || global.mods?.map(n => n + '@s.whatsapp.net')?.includes(sender) || false;
+  const isPremium = isMod || user.premium;
+  if ((cmdData.isOwner || cmdData.ownerOnly) && !isOwner) {
+    if (settings.prefix === 1) return;
+    return msg.reply(`ꕤ Este comando solo lo puede usar el *creador/owner* del bot.`);
+  }
+  if (cmdData.modOnly && !isMod) {
+    return msg.reply(`ꕤ Este comando solo lo pueden usar los *moderadores*.`);
+  }
+  if (cmdData.premiumOnly && !isPremium) {
+    return msg.reply(`⭐ Este comando es exclusivo para usuarios *premium*.`);
+  }
+  if ((cmdData.isAdmin || cmdData.adminOnly) && msg.isGroup && !isAdmins && !isMod) {
+    return sock.reply(msg.chat, '《✧》 Este comando solo puede ser ejecutado por los *administradores* del grupo.', msg);
+  }
+  if (cmdData.groupOnly && !msg.isGroup) {
+    return msg.reply(`👥 Este comando solo funciona en *grupos*.`);
+  }
+  if (cmdData.privateOnly && msg.isGroup) {
+    return msg.reply(`📩 Este comando solo funciona en *chat privado*.`);
+  }
+  if ((cmdData.botAdmin || cmdData.botAdminRequired) && msg.isGroup && !isBotAdmins) {
+    return sock.reply(msg.chat, '《✧》 Este comando requiere que el bot sea *administrador* del grupo.', msg);
+  }
+
+  // Permisos viejos por compatibilidad
   if (cmdData.isOwner && !isOwner) {
     if (settings.prefix === 1) return;
     return msg.reply(`ꕤ El comando *${command}* no existe.\n✎ Usa *${usedPrefix}help* para ver la lista de comandos disponibles.`);

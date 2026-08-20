@@ -59,6 +59,13 @@ function normalizePhone(input) {
   return s;
 }
 
+// Mismo backoff exponencial con jitter que el bot principal
+function backoffDelay(attempt, baseMs = 4000, maxMs = 45000, jitterMs = 2000) {
+  const exponential = baseMs * Math.pow(1.6, Math.min(attempt, 8));
+  const capped = Math.min(maxMs, exponential);
+  return Math.max(2000, capped + (Math.random() * jitterMs * 2 - jitterMs));
+}
+
 export async function startSubBot(msg, client, caption = '', isCode = false, phone = '', chatId = '', isCommand = false) {
   const id = normalizePhone(phone || (msg?.sender || '').split('@')[0]);
   if (!id) throw new Error('No se pudo obtener el número del Sub-Bot.');
@@ -160,10 +167,11 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
       remove(socks);
       const intentos = reintentos[botId] || 0;
       reintentos[botId] = intentos + 1;
+      const delay = backoffDelay(intentos, 4000, 30000, 1500);
       if ([401, 403].includes(reason)) {
         if (intentos < 5) {
-          console.log(chalk.gray(`[ ✿  ]  SUB-BOT ${botId} Conexión cerrada (código ${reason}) intento ${intentos}/5 → Reintentando...`));
-          setTimeout(() => startSubBot(msg, getClient(client), caption, isCode, phone, chatId, isCommand), 4000);
+          console.log(chalk.gray(`[ ✿  ]  SUB-BOT ${botId} Conexión cerrada (código ${reason}) intento ${intentos}/5 → Reintentando en ${Math.round(delay/1000)}s...`));
+          setTimeout(() => startSubBot(msg, getClient(client), caption, isCode, phone, chatId, isCommand), delay);
         } else {
           console.log(chalk.gray(`[ ✿  ]  SUB-BOT ${botId} Falló tras 5 intentos. Eliminando sesión.`));
           try { fs.rmSync(sessionFolder, { recursive: true, force: true }); } catch (e) { console.error(`[ ✿  ] No se pudo eliminar ${sessionFolder}:`, e); }
@@ -171,11 +179,8 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
         }
         return;
       }
-      if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
-        setTimeout(() => startSubBot(msg, getClient(client), caption, isCode, phone, chatId, isCommand), 4000);
-        return;
-      }
-      setTimeout(() => startSubBot(msg, getClient(client), caption, isCode, phone, chatId, isCommand), 4000);
+      console.log(chalk.gray(`[ ✿  ]  SUB-BOT ${botId} desconectado (código ${reason}), reconectando en ${Math.round(delay/1000)}s...`));
+      setTimeout(() => startSubBot(msg, getClient(client), caption, isCode, phone, chatId, isCommand), delay);
     }
     if (qr && isCode && phone && socks.client && chatId && senderId && commandFlags[senderId]) {
       try {

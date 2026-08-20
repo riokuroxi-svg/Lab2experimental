@@ -106,7 +106,8 @@ async function loadBots() {
         console.log(chalk.gray(`[ loadBots ] Error iniciando ${name} ${userId}: ${e?.message || e}`));
         reconnecting.delete(userId);
       }
-      await new Promise((res) => setTimeout(res, 2500));
+      // Espera con jitter entre cada subbot para no saturar la conexión
+      await new Promise((res) => setTimeout(res, 1500 + Math.random() * 1500));
     }
   }
   setTimeout(loadBots, 60 * 1000);
@@ -183,6 +184,15 @@ if (hasSessionFile) {
       phoneNumber = normalizePhone(phoneInput);
     }
   }
+}
+
+// Backoff exponencial con jitter para reconexiones: base * 1.6^intento + aleatorio
+// Evita que todos los bots se reconecten al mismo tiempo exacto (thundering herd)
+function backoffDelay(attempt, baseMs = 3000, maxMs = 60000, jitterMs = 2000) {
+  const exponential = baseMs * Math.pow(1.6, Math.min(attempt, 8));
+  const capped = Math.min(maxMs, exponential);
+  // Retraso con ±jitterMs de variación aleatoria
+  return Math.max(1000, capped + (Math.random() * jitterMs * 2 - jitterMs));
 }
 
 let bootTime = Date.now();
@@ -399,7 +409,7 @@ export async function startBot() {
         clearSession();
         process.exit(1);
       }
-      const delay = Math.min(3000 * reconexion, 30000);
+      const delay = backoffDelay(reconexion, 3000, 45000, 1500);
       const reasonMessages = {
         [DisconnectReason.connectionLost]: "Se perdió la conexión al servidor, intentando reconectar...",
         [DisconnectReason.connectionClosed]: "Conexión cerrada, intentando reconectarse...",
@@ -407,7 +417,7 @@ export async function startBot() {
         [DisconnectReason.timedOut]: "Tiempo de conexión agotado, intentando reconectarse...",
         [DisconnectReason.badSession]: "Sesión inválida, limpiando y reconectando...",
       };
-      log.warn(reasonMessages[reason] || `Desconexión (${reason}), reconectando en ${delay / 1000}s...`);
+      log.warn(reasonMessages[reason] || `Desconexión (${reason}), reconectando en ${Math.round(delay / 1000)}s...`);
       isRestarting = false;
       setTimeout(startBot, delay);
     }

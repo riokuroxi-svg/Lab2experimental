@@ -4,8 +4,55 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
 const exec = promisify(execFile)
+
+// Verificar si ffmpeg está disponible para incrustar portadas
+let ffmpegDisponible = null;
+async function isFfmpegAvailable() {
+  if (ffmpegDisponible !== null) return ffmpegDisponible;
+  try {
+    await exec('ffmpeg', ['-version'], { timeout: 5000 });
+    ffmpegDisponible = true;
+  } catch {
+    ffmpegDisponible = false;
+  }
+  return ffmpegDisponible;
+}
+
+// Agregar portada y metadatos al MP3
+async function addCoverToMp3(audioBuffer, thumbUrl, titulo, artista = 'YouTube') {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'));
+  const audioPath = path.join(tmpDir, 'audio.mp3');
+  const thumbPath = path.join(tmpDir, 'cover.jpg');
+  const outPath = path.join(tmpDir, 'final.mp3');
+  try {
+    fs.writeFileSync(audioPath, audioBuffer);
+    try {
+      const thumbRes = await fastFetch(thumbUrl, { timeout: 10000 });
+      if (thumbRes.ok) {
+        const thumbBuf = Buffer.from(await thumbRes.arrayBuffer());
+        fs.writeFileSync(thumbPath, thumbBuf);
+      }
+    } catch {}
+    const args = ['-y', '-i', audioPath];
+    if (fs.existsSync(thumbPath)) {
+      args.push('-i', thumbPath, '-map', '0:0', '-map', '1:0', '-c', 'copy',
+        '-id3v2_version', '3',
+        '-metadata:s:v', 'title="Album cover"',
+        '-metadata:s:v', 'comment="Cover (front)"');
+    }
+    args.push('-metadata', `title=${titulo}`, '-metadata', `artist=${artista}`, outPath);
+    await exec('ffmpeg', args, { timeout: 30000 });
+    if (fs.existsSync(outPath)) return fs.readFileSync(outPath);
+    return audioBuffer;
+  } catch {
+    return audioBuffer;
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
 
 const MAX_REINTENTOS_API = 2
@@ -383,8 +430,17 @@ async function ejecutarDescarga(sock, job, modo, m) {
       if (estadoMsg?.key) { try { await sock.sendMessage(chat, { delete: estadoMsg.key }) } catch {} }
       
       const audioInfo = tipoAudio(buffer)
+      // Agregar portada si está disponible
+      let audioFinal = buffer;
+      const ffmpegOk = await isFfmpegAvailable();
+      if (!comoDoc && ffmpegOk && audioInfo.ext === 'mp3' && job.thumbnail && ytdlpDisponible) {
+        try {
+          await sock.sendMessage(chat, { react: { text: '🖼️', key: m.key } });
+          audioFinal = await addCoverToMp3(buffer, job.thumbnail, job.title, job.channel || 'YouTube');
+        } catch {}
+      }
       await sock.sendMessage(chat, {
-        [comoDoc ? 'document' : 'audio']: buffer,
+        [comoDoc ? 'document' : 'audio']: audioFinal,
         mimetype: audioInfo.mimetype,
         fileName: `${sanitizeFilename(job.title)}.${audioInfo.ext}`,
         ptt: false
@@ -470,8 +526,19 @@ const cmd = {
           if (estado?.key) { try { await sock.sendMessage(msg.chat, { delete: estado.key }) } catch {} }
           
           const audioInfo = tipoAudio(buffer)
+          // Agregar portada si es mp3, hay thumbnail, y ffmpeg está instalado
+          let audioFinal = buffer;
+          const thumbUrl = (info.status === 'fulfilled' && info.value) ? (info.value.thumbnail || info.value.image) : null;
+          const ffmpegOk = await isFfmpegAvailable();
+          if (ffmpegOk && audioInfo.ext === 'mp3' && thumbUrl && ytdlpDisponible) {
+            try {
+              await sock.sendMessage(msg.chat, { react: { text: '🖼️', key: msg.key } });
+              const artist = (info.status === 'fulfilled' && info.value) ? (info.value.author?.name || 'YouTube') : 'YouTube';
+              audioFinal = await addCoverToMp3(buffer, thumbUrl, title, artist);
+            } catch {}
+          }
           await sock.sendMessage(msg.chat, {
-            audio: buffer,
+            audio: audioFinal,
             fileName: `${sanitizeFilename(title)}.${audioInfo.ext}`,
             mimetype: audioInfo.mimetype
           }, { quoted: msg })

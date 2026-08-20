@@ -30,8 +30,9 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import fs from 'fs'
 import path from 'path'
-import fetch from 'node-fetch'
 import { fileURLToPath } from 'url'
+// Usar fetch nativo de Node.js
+const fetch = globalThis.fetch
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -203,6 +204,60 @@ if (!global.__ytdlpUpdater) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  UTILIDAD: Ver si ffmpeg está instalado para incrustar portadas
+// ════════════════════════════════════════════════════════════
+let ffmpegDisponible = null;
+async function isFfmpegAvailable() {
+  if (ffmpegDisponible !== null) return ffmpegDisponible;
+  try {
+    await exec('ffmpeg', ['-version'], { timeout: 5000 });
+    ffmpegDisponible = true;
+  } catch {
+    ffmpegDisponible = false;
+  }
+  return ffmpegDisponible;
+}
+
+// Descarga thumbnail e incrusta portada + metadatos en el buffer de audio (MP3)
+async function addCoverToMp3(audioBuffer, thumbUrl, titulo, artista = 'Ginko-MD') {
+  const os = await import('os');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'));
+  const audioPath = path.join(tmpDir, 'audio.mp3');
+  const thumbPath = path.join(tmpDir, 'cover.jpg');
+  const outPath = path.join(tmpDir, 'final.mp3');
+  try {
+    fs.writeFileSync(audioPath, audioBuffer);
+    // Descargar portada
+    try {
+      const thumbRes = await fetch(thumbUrl, { timeout: 10000 });
+      if (thumbRes.ok) {
+        const thumbBuf = Buffer.from(await thumbRes.arrayBuffer());
+        fs.writeFileSync(thumbPath, thumbBuf);
+      }
+    } catch { /* sin portada, no pasa nada */ }
+
+    const args = ['-y', '-i', audioPath];
+    if (fs.existsSync(thumbPath)) {
+      args.push('-i', thumbPath, '-map', '0:0', '-map', '1:0', '-c', 'copy',
+        '-id3v2_version', '3',
+        '-metadata:s:v', 'title="Album cover"',
+        '-metadata:s:v', 'comment="Cover (front)"');
+    }
+    args.push('-metadata', `title=${titulo}`, '-metadata', `artist=${artista}`, outPath);
+    
+    await exec('ffmpeg', args, { timeout: 30000 });
+    if (fs.existsSync(outPath)) {
+      return fs.readFileSync(outPath);
+    }
+    return audioBuffer;
+  } catch {
+    return audioBuffer; // si falla, devolvemos el audio sin portada
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 //  COMANDO
 // ════════════════════════════════════════════════════════════
 export default {
@@ -263,16 +318,17 @@ export default {
         etiquetaModo = 'MP3 320k'
         argsDesc = [
           '-f', 'ba', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-          '--no-embed-metadata', '--no-embed-thumbnail', ...ARGS_VELOCIDAD
+          '--embed-metadata', ...ARGS_VELOCIDAD
         ]
       } else if (esFast) {
         ext = 'm4a'
-        etiquetaModo = 'M4A LIGERO'
-        argsDesc = ['-f', 'ba[ext=m4a][abr<=96]/ba[ext=m4a]/ba', ...ARGS_VELOCIDAD]
+        etiquetaModo = 'M4A LIGERO ⚡'
+        // Modo rápido: SIN conversión extra, SIN metadatos ni portada para máxima velocidad
+        argsDesc = ['-f', 'ba[ext=m4a][abr<=96]/ba[ext=m4a]/ba', '--no-embed-metadata', '--no-embed-thumbnail', ...ARGS_VELOCIDAD]
       } else {
         ext = 'm4a'
         etiquetaModo = 'M4A NATIVO'
-        argsDesc = ['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba', ...ARGS_VELOCIDAD]
+        argsDesc = ['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba', '--embed-metadata', ...ARGS_VELOCIDAD]
       }
 
       // 3) Caché
@@ -313,8 +369,19 @@ export default {
       if (!esVideo) {
         const a = tipoAudio(buf)
         const nombre = `${limpiarNombre(titulo)}.${a.ext}`
+        
+        // Agregar portada y metadatos al MP3 si ffmpeg está disponible (excepto en modo fast para no perder velocidad)
+        let audioFinal = buf;
+        const ffmpegOk = !esFast && await isFfmpegAvailable();
+        if (ffmpegOk && a.ext === 'mp3' && info.thumbnail) {
+          try {
+            await sock.sendMessage(msg.chat, { react: { text: '🖼️', key: msg.key } });
+            audioFinal = await addCoverToMp3(buf, info.thumbnail, titulo, info.uploader || 'YouTube');
+          } catch {}
+        }
+        
         await sock.sendMessage(msg.chat, {
-          audio: buf,
+          audio: audioFinal,
           mimetype: a.mimetype,
           fileName: nombre,
           ptt: false
