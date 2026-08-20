@@ -30,66 +30,23 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { fileURLToPath } from 'url'
 // Usar fetch nativo de Node.js
 const fetch = globalThis.fetch
+import { downloadAudioYtdlp, addCustomCoverToMp3, isMp3Valid } from '#lib/mp3Utils'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
-const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg'
-const VERSION = '2.2.0'
+const VERSION = '2.4.0'
 const __filename = fileURLToPath(import.meta.url)
 
 const MB = 1024 * 1024
 const MAX_MB_VIDEO = 100
-const MAX_MB_AUDIO = 50
 const LIMITE_VIDEO_DIRECTO = 16 * MB
 
 const CACHE_DIR = path.join(process.cwd(), 'media', 'cache-ytdlp')
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_MAX_MB = 250
-
-// Portada personalizada para todos los MP3
-const COVER_PATH = path.join(process.cwd(), 'media', 'audio-cover.jpg')
-// Cache para saber si ffmpeg está disponible
-let ffmpegDisponible = null
-async function isFfmpegAvailable() {
-  if (ffmpegDisponible !== null) return ffmpegDisponible
-  try {
-    await exec(FFMPEG, ['-version'], { timeout: 5000 })
-    ffmpegDisponible = fs.existsSync(COVER_PATH)
-  } catch {
-    ffmpegDisponible = false
-  }
-  return ffmpegDisponible
-}
-
-// Agregar portada + metadatos al MP3
-async function addCoverToMp3(audioBuffer, titulo) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'))
-  const audioPath = path.join(tmpDir, 'in.mp3')
-  const outPath = path.join(tmpDir, 'out.mp3')
-  try {
-    fs.writeFileSync(audioPath, audioBuffer)
-    await exec(FFMPEG, ['-y', '-i', audioPath, '-i', COVER_PATH,
-      '-map', '0:0', '-map', '1:0',
-      '-c', 'copy', '-id3v2_version', '3',
-      '-metadata:s:v', 'title=Album cover', '-metadata:s:v', 'comment=Cover (front)',
-      '-metadata', `title=${titulo}`,
-      '-metadata', 'artist=Ginko Bot',
-      '-metadata', 'album=Ginko Bot',
-      outPath], { timeout: 30000 })
-    if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1024) {
-      return fs.readFileSync(outPath)
-    }
-    return audioBuffer
-  } catch {
-    return audioBuffer
-  } finally {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
-  }
-}
 
 // ── utilidades ──────────────────────────────────────────────
 function limpiarNombre(texto = 'descarga') {
@@ -338,20 +295,35 @@ export default {
       if (!desdeCache) {
         global.__ytdlpBusy = true
         try {
-          const maxBuf = (esVideo ? MAX_MB_VIDEO : MAX_MB_AUDIO) * MB
-          // Intentar la descarga, si falla usar fallback genérico
-          try {
-            buf = await runYtdlp([...argsDesc, '-o', '-', '--', url], { maxBuffer: maxBuf, timeout: 12 * 60 * 1000 })
-          } catch (primerError) {
-            console.log('[ytdlp] Formato falló, usando fallback genérico')
-            // Fallback: el mejor formato disponible sin restricciones
-            const fallbackArgs = esVideo
-              ? ['-f', 'best', ...ARGS_VELOCIDAD, '-o', '-', '--', url]
-              : ['-f', 'bestaudio/best', '-x' , ...ARGS_VELOCIDAD, '-o', '-', '--', url]
-            buf = await runYtdlp(fallbackArgs, { maxBuffer: maxBuf, timeout: 12 * 60 * 1000 })
+          if (esVideo) {
+            // Para video seguimos usando el método anterior, pero con archivo temporal para no corromper
+            const os = await import('os');
+            const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-vid-'));
+            const outTemplate = path.join(tmpDir, 'video.%(ext)s');
+            const maxBuf = MAX_MB_VIDEO * MB;
+            try {
+              let argsVid = [...argsDesc, '-o', outTemplate, '--', url];
+              try {
+                await exec(YTDLP, argsVid, { timeout: 12 * 60 * 1000, windowsHide: true, cwd: tmpDir });
+              } catch (e) {
+                // Fallback video
+                await exec(YTDLP, ['-f', 'best', ...ARGS_VELOCIDAD, '-o', outTemplate, '--', url], { timeout: 12 * 60 * 1000, windowsHide: true });
+              }
+              const files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.webm'));
+              if (files.length === 0) throw new Error('No se pudo descargar el video');
+              buf = fs.readFileSync(path.join(tmpDir, files[0]));
+              try { fs.writeFileSync(rutaCache, buf); } catch {}
+              try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+            } catch (e) {
+              try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+              throw e;
+            }
+          } else {
+            // Audio: usar la función que descarga a archivo temporal (sin corrupción)
+            buf = await downloadAudioYtdlp(url, esFast ? 'fast' : esMp3 ? 'mp3' : 'normal', YTDLP);
+            try { fs.writeFileSync(rutaCache, buf) } catch {}
           }
           if (!buf || buf.length < 1024) throw new Error('El archivo descargado está vacío')
-          try { fs.writeFileSync(rutaCache, buf) } catch { /* sin caché, no pasa nada */ }
         } finally {
           global.__ytdlpBusy = false
         }
@@ -367,14 +339,13 @@ export default {
         (desdeCache ? `\n𖣣ֶㅤ֯⌗ ⚡  ⬭ *Desde caché (instantáneo)*` : '')
 
       if (!esVideo) {
-        // Agregar portada PERSONALIZADA en TODOS los audios (incluso fast, ya que es una copia local sin descargar nada)
+        // Agregar portada PERSONALIZADA
         let audioFinal = buf;
-        const ffmpegOk = await isFfmpegAvailable();
-        if (ffmpegOk) {
-          try {
-            await msg.react('🖼️');
-            audioFinal = await addCoverToMp3(buf, titulo);
-          } catch {}
+        try {
+          await msg.react('🖼️');
+          audioFinal = await addCustomCoverToMp3(buf, titulo);
+        } catch (e) {
+          console.log('[ytdlp] Error agregando portada:', e.message);
         }
         const nombre = `${limpiarNombre(titulo)}.mp3`;
         await sock.sendMessage(msg.chat, {
