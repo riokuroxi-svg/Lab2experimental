@@ -8,47 +8,64 @@ import os from 'os'
 
 const exec = promisify(execFile)
 
+// Ruta de la portada PERSONALIZADA que nos pasaste
+const COVER_PATH = path.join(process.cwd(), 'media', 'audio-cover.jpg')
+
 // Verificar si ffmpeg está disponible para incrustar portadas
 let ffmpegDisponible = null;
 async function isFfmpegAvailable() {
   if (ffmpegDisponible !== null) return ffmpegDisponible;
   try {
     await exec('ffmpeg', ['-version'], { timeout: 5000 });
-    ffmpegDisponible = true;
+    ffmpegDisponible = fs.existsSync(COVER_PATH); // Solo si ffmpeg Y la portada existen
   } catch {
     ffmpegDisponible = false;
   }
   return ffmpegDisponible;
 }
 
-// Agregar portada y metadatos al MP3
-async function addCoverToMp3(audioBuffer, thumbUrl, titulo, artista = 'YouTube') {
+// Agregar portada PERSONALIZADA + metadatos al MP3, forzando formato MP3 para que no salga nombre raro
+async function addCoverToMp3(audioBuffer, titulo, artista = 'Ginko Bot') {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'));
   const audioPath = path.join(tmpDir, 'audio.mp3');
-  const thumbPath = path.join(tmpDir, 'cover.jpg');
   const outPath = path.join(tmpDir, 'final.mp3');
   try {
     fs.writeFileSync(audioPath, audioBuffer);
-    try {
-      const thumbRes = await fastFetch(thumbUrl, { timeout: 10000 });
-      if (thumbRes.ok) {
-        const thumbBuf = Buffer.from(await thumbRes.arrayBuffer());
-        fs.writeFileSync(thumbPath, thumbBuf);
-      }
-    } catch {}
-    const args = ['-y', '-i', audioPath];
-    if (fs.existsSync(thumbPath)) {
-      args.push('-i', thumbPath, '-map', '0:0', '-map', '1:0', '-c', 'copy',
-        '-id3v2_version', '3',
-        '-metadata:s:v', 'title="Album cover"',
-        '-metadata:s:v', 'comment="Cover (front)"');
-    }
-    args.push('-metadata', `title=${titulo}`, '-metadata', `artist=${artista}`, outPath);
+    const args = ['-y', '-i', audioPath, '-i', COVER_PATH,
+      '-map', '0:0', '-map', '1:0',
+      '-c', 'copy', '-id3v2_version', '3',
+      '-metadata:s:v', 'title="Album cover"',
+      '-metadata:s:v', 'comment="Cover (front)"',
+      '-metadata', `title=${titulo}`,
+      '-metadata', `artist=${artista}`,
+      '-metadata', 'album=Ginko Bot',
+      outPath];
     await exec('ffmpeg', args, { timeout: 30000 });
     if (fs.existsSync(outPath)) return fs.readFileSync(outPath);
     return audioBuffer;
   } catch {
-    return audioBuffer;
+    return audioBuffer; // si falla, devolvemos el audio normal
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// Forzar que TODO el audio se descargue en MP3 (para que no salgan nombres raros de WhatsApp y funcione la portada)
+async function convertirAMp3(bufferEntrada, titulo) {
+  if (!await isFfmpegAvailable()) return { buffer: bufferEntrada, ext: 'mp3', mimetype: 'audio/mpeg' };
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-conv-'));
+  const inPath = path.join(tmpDir, 'input');
+  const outPath = path.join(tmpDir, 'output.mp3');
+  try {
+    fs.writeFileSync(inPath, bufferEntrada);
+    await exec('ffmpeg', ['-y', '-i', inPath, '-vn', '-ar', '44100', '-ac', '2', '-b:a', '128k', outPath], { timeout: 45000 });
+    if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 1024) return { buffer: bufferEntrada, ext: 'mp3', mimetype: 'audio/mpeg' };
+    let bufFinal = fs.readFileSync(outPath);
+    // Agregar portada
+    bufFinal = await addCoverToMp3(bufFinal, titulo);
+    return { buffer: bufFinal, ext: 'mp3', mimetype: 'audio/mpeg' };
+  } catch {
+    return { buffer: bufferEntrada, ext: 'mp3', mimetype: 'audio/mpeg' };
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
@@ -208,23 +225,19 @@ const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube
 async function descargarAudioYtdlp(url, modo = 'fast') {
   // Primero asegurarse de que yt-dlp esté ACTUALIZADO (arregla el error de signature/n-challenge)
   try {
-    const execa = await import('child_process');
-    const { promisify } = await import('util');
-    const exec = promisify(execa.execFile);
-    // Actualizar silenciosamente (solo si hay actualización)
     await exec(YTDLP, ['-U', '--update-to', 'nightly'], { timeout: 30000 }).catch(() => {});
   } catch {}
 
-  // Modo 'fast' = formato más compatible, sin fallos (no pedir abr<=96 que a veces no existe)
+  // SIEMPRE pedir el mejor audio y convertirlo a MP3 (para que no haya nombres raros de WhatsApp, y funcione la portada)
+  // No hacemos restricciones de formato para no fallar
   let args
   if (modo === 'mp3') {
-    args = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', ...ARGS_VELOCIDAD]
+    args = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0', ...ARGS_VELOCIDAD]
   } else if (modo === 'normal') {
-    // Audio normal, cualquier formato de audio, sin restricción estricta
-    args = ['-f', 'bestaudio[ext=m4a]/bestaudio/best', ...ARGS_VELOCIDAD]
+    args = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '2', ...ARGS_VELOCIDAD]
   } else {
-    // Modo rápido: MEJOR FORMATO DISPONIBLE, no hay restricción de abr para no fallar
-    args = ['-f', 'bestaudio/best', ...ARGS_VELOCIDAD, '--no-embed-metadata', '--no-embed-thumbnail']
+    // Modo rápido: mp3 de 96k para máxima velocidad
+    args = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '9', ...ARGS_VELOCIDAD]
   }
   args.push('-o', '-', '--', url)
   
@@ -239,16 +252,15 @@ async function descargarAudioYtdlp(url, modo = 'fast') {
     });
     stdout = result.stdout;
   } catch (e) {
-    const stderr = e.stderr ? String(e.stderr) : e.message || ''
-    // Si falla el primer intento, intentar con formato genérico sin restricciones
-    const fallbackArgs = ['-f', 'bestaudio/best', '-x', ...ARGS_VELOCIDAD, '-o', '-', '--', url];
+    // Si falla, intentar de nuevo con argumentos más básicos
+    const fallbackArgs = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', ...ARGS_VELOCIDAD, '-o', '-', '--', url];
     try {
       const result2 = await exec(YTDLP, fallbackArgs, { maxBuffer: MAX_MB_AUDIO, timeout: 120000, windowsHide: true, encoding: 'buffer' });
       stdout = result2.stdout;
     } catch (e2) {
-      const errorMsg = String(e2.stderr || e2.message || stderr || 'Error desconocido')
-        .split('\n').filter(l => l.includes('ERROR:') || l.includes('error:') || l.includes('WARNING:')).slice(-2).join(' | ')
-      throw new Error(errorMsg || 'Error al descargar con yt-dlp')
+      const errorMsg = String(e2.stderr || e2.message || e.message || 'Error desconocido')
+        .split('\n').filter(l => l.includes('ERROR:') || l.includes('error:')).slice(-1).join(' | ')
+      throw new Error(errorMsg || 'Error al descargar')
     }
   }
   const buf = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout, 'binary')
@@ -459,20 +471,26 @@ async function ejecutarDescarga(sock, job, modo, m) {
       
       if (estadoMsg?.key) { try { await sock.sendMessage(chat, { delete: estadoMsg.key }) } catch {} }
       
-      const audioInfo = tipoAudio(buffer)
-      // Agregar portada si está disponible
+      // Convertir a MP3 con nuestra portada personalizada
       let audioFinal = buffer;
+      let filenameExt = 'mp3';
+      let mimetypeFinal = 'audio/mpeg';
+      
       const ffmpegOk = await isFfmpegAvailable();
-      if (!comoDoc && ffmpegOk && audioInfo.ext === 'mp3' && job.thumbnail && ytdlpDisponible) {
+      if (!comoDoc && ffmpegOk && ytdlpDisponible) {
         try {
           await sock.sendMessage(chat, { react: { text: '🖼️', key: m.key } });
-          audioFinal = await addCoverToMp3(buffer, job.thumbnail, job.title, job.channel || 'YouTube');
+          const converted = await convertirAMp3(buffer, sanitizeFilename(job.title));
+          audioFinal = converted.buffer;
+          filenameExt = converted.ext;
+          mimetypeFinal = converted.mimetype;
         } catch {}
       }
+      
       await sock.sendMessage(chat, {
         [comoDoc ? 'document' : 'audio']: audioFinal,
-        mimetype: audioInfo.mimetype,
-        fileName: `${sanitizeFilename(job.title)}.${audioInfo.ext}`,
+        mimetype: mimetypeFinal,
+        fileName: `${sanitizeFilename(job.title)}.${filenameExt}`,
         ptt: false
       }, { quoted: m })
     } else {
@@ -555,22 +573,27 @@ const cmd = {
           
           if (estado?.key) { try { await sock.sendMessage(msg.chat, { delete: estado.key }) } catch {} }
           
-          const audioInfo = tipoAudio(buffer)
-          // Agregar portada si es mp3, hay thumbnail, y ffmpeg está instalado
+          // Convertir a MP3 con nuestra portada personalizada
           let audioFinal = buffer;
-          const thumbUrl = (info.status === 'fulfilled' && info.value) ? (info.value.thumbnail || info.value.image) : null;
+          let filenameExt = 'mp3';
+          let mimetypeFinal = 'audio/mpeg';
+          
           const ffmpegOk = await isFfmpegAvailable();
-          if (ffmpegOk && audioInfo.ext === 'mp3' && thumbUrl && ytdlpDisponible) {
+          if (ffmpegOk && ytdlpDisponible) {
             try {
               await sock.sendMessage(msg.chat, { react: { text: '🖼️', key: msg.key } });
-              const artist = (info.status === 'fulfilled' && info.value) ? (info.value.author?.name || 'YouTube') : 'YouTube';
-              audioFinal = await addCoverToMp3(buffer, thumbUrl, title, artist);
+              const converted = await convertirAMp3(buffer, sanitizeFilename(title));
+              audioFinal = converted.buffer;
+              filenameExt = converted.ext;
+              mimetypeFinal = converted.mimetype;
             } catch {}
           }
+          
           await sock.sendMessage(msg.chat, {
             audio: audioFinal,
-            fileName: `${sanitizeFilename(title)}.${audioInfo.ext}`,
-            mimetype: audioInfo.mimetype
+            fileName: `${sanitizeFilename(title)}.${filenameExt}`,
+            mimetype: mimetypeFinal,
+            ptt: false
           }, { quoted: msg })
           
           try { await sock.sendMessage(msg.chat, { react: { text: '✅', key: msg.key } }) } catch {}

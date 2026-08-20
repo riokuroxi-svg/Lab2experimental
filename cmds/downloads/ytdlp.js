@@ -30,13 +30,15 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { fileURLToPath } from 'url'
 // Usar fetch nativo de Node.js
 const fetch = globalThis.fetch
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
-const VERSION = '2.1.0'
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg'
+const VERSION = '2.2.0'
 const __filename = fileURLToPath(import.meta.url)
 
 const MB = 1024 * 1024
@@ -47,6 +49,47 @@ const LIMITE_VIDEO_DIRECTO = 16 * MB
 const CACHE_DIR = path.join(process.cwd(), 'media', 'cache-ytdlp')
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_MAX_MB = 250
+
+// Portada personalizada para todos los MP3
+const COVER_PATH = path.join(process.cwd(), 'media', 'audio-cover.jpg')
+// Cache para saber si ffmpeg está disponible
+let ffmpegDisponible = null
+async function isFfmpegAvailable() {
+  if (ffmpegDisponible !== null) return ffmpegDisponible
+  try {
+    await exec(FFMPEG, ['-version'], { timeout: 5000 })
+    ffmpegDisponible = fs.existsSync(COVER_PATH)
+  } catch {
+    ffmpegDisponible = false
+  }
+  return ffmpegDisponible
+}
+
+// Agregar portada + metadatos al MP3
+async function addCoverToMp3(audioBuffer, titulo) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'))
+  const audioPath = path.join(tmpDir, 'in.mp3')
+  const outPath = path.join(tmpDir, 'out.mp3')
+  try {
+    fs.writeFileSync(audioPath, audioBuffer)
+    await exec(FFMPEG, ['-y', '-i', audioPath, '-i', COVER_PATH,
+      '-map', '0:0', '-map', '1:0',
+      '-c', 'copy', '-id3v2_version', '3',
+      '-metadata:s:v', 'title=Album cover', '-metadata:s:v', 'comment=Cover (front)',
+      '-metadata', `title=${titulo}`,
+      '-metadata', 'artist=Ginko Bot',
+      '-metadata', 'album=Ginko Bot',
+      outPath], { timeout: 30000 })
+    if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1024) {
+      return fs.readFileSync(outPath)
+    }
+    return audioBuffer
+  } catch {
+    return audioBuffer
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
+  }
+}
 
 // ── utilidades ──────────────────────────────────────────────
 function limpiarNombre(texto = 'descarga') {
@@ -205,59 +248,7 @@ if (!global.__ytdlpUpdater) {
   }
 }
 
-// ════════════════════════════════════════════════════════════
-//  UTILIDAD: Ver si ffmpeg está instalado para incrustar portadas
-// ════════════════════════════════════════════════════════════
-let ffmpegDisponible = null;
-async function isFfmpegAvailable() {
-  if (ffmpegDisponible !== null) return ffmpegDisponible;
-  try {
-    await exec('ffmpeg', ['-version'], { timeout: 5000 });
-    ffmpegDisponible = true;
-  } catch {
-    ffmpegDisponible = false;
-  }
-  return ffmpegDisponible;
-}
 
-// Descarga thumbnail e incrusta portada + metadatos en el buffer de audio (MP3)
-async function addCoverToMp3(audioBuffer, thumbUrl, titulo, artista = 'Ginko-MD') {
-  const os = await import('os');
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'));
-  const audioPath = path.join(tmpDir, 'audio.mp3');
-  const thumbPath = path.join(tmpDir, 'cover.jpg');
-  const outPath = path.join(tmpDir, 'final.mp3');
-  try {
-    fs.writeFileSync(audioPath, audioBuffer);
-    // Descargar portada
-    try {
-      const thumbRes = await fetch(thumbUrl, { timeout: 10000 });
-      if (thumbRes.ok) {
-        const thumbBuf = Buffer.from(await thumbRes.arrayBuffer());
-        fs.writeFileSync(thumbPath, thumbBuf);
-      }
-    } catch { /* sin portada, no pasa nada */ }
-
-    const args = ['-y', '-i', audioPath];
-    if (fs.existsSync(thumbPath)) {
-      args.push('-i', thumbPath, '-map', '0:0', '-map', '1:0', '-c', 'copy',
-        '-id3v2_version', '3',
-        '-metadata:s:v', 'title="Album cover"',
-        '-metadata:s:v', 'comment="Cover (front)"');
-    }
-    args.push('-metadata', `title=${titulo}`, '-metadata', `artist=${artista}`, outPath);
-    
-    await exec('ffmpeg', args, { timeout: 30000 });
-    if (fs.existsSync(outPath)) {
-      return fs.readFileSync(outPath);
-    }
-    return audioBuffer;
-  } catch {
-    return audioBuffer; // si falla, devolvemos el audio sin portada
-  } finally {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-  }
-}
 
 // ════════════════════════════════════════════════════════════
 //  COMANDO
@@ -272,9 +263,9 @@ export default {
         `《✧》 *yt-dlp turbo* — motor local, sin APIs públicas.\n\n` +
         `Uso:\n` +
         `*${usedPrefix}ytdlp* <enlace>          → video (≤720p)\n` +
-        `*${usedPrefix}ytdlp* <enlace> audio    → canción en m4a (⚡ sin conversión)\n` +
-        `*${usedPrefix}ytdlp* <enlace> mp3      → mp3 320k (usa ffmpeg)\n` +
-        `*${usedPrefix}ytdlp* <enlace> fast     → m4a ~96k, máxima velocidad\n\n` +
+        `*${usedPrefix}ytdlp* <enlace> audio    → canción MP3 con portada personalizada ⚡\n` +
+        `*${usedPrefix}ytdlp* <enlace> mp3      → mp3 320k con portada\n` +
+        `*${usedPrefix}ytdlp* <enlace> fast     → mp3 rápido, máxima velocidad\n\n` +
         `Ejemplo: *${usedPrefix}ytdlp* https://youtu.be/xxxx audio`
       )
     }
@@ -315,22 +306,20 @@ export default {
           '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
           '--merge-output-format', 'mp4', ...ARGS_VELOCIDAD
         ]
-      } else if (esMp3) {
-        ext = 'mp3'
-        etiquetaModo = 'MP3 320k'
-        argsDesc = [
-          '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-          '--embed-metadata', ...ARGS_VELOCIDAD
-        ]
-      } else if (esFast) {
-        ext = 'm4a'
-        etiquetaModo = 'M4A RÁPIDO ⚡'
-        // Formato compatible sin restricciones estrictas que causen error
-        argsDesc = ['-f', 'bestaudio/best', ...ARGS_VELOCIDAD, '--no-embed-metadata', '--no-embed-thumbnail']
       } else {
-        ext = 'm4a'
-        etiquetaModo = 'M4A'
-        argsDesc = ['-f', 'bestaudio[ext=m4a]/bestaudio/best', '--embed-metadata', ...ARGS_VELOCIDAD]
+        // TODOS los modos de audio devuelven MP3 para que funcione la portada y no salga nombre raro
+        esVideo = false
+        ext = 'mp3'
+        if (esMp3) {
+          etiquetaModo = 'MP3 320k'
+          argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0', ...ARGS_VELOCIDAD]
+        } else if (esFast) {
+          etiquetaModo = 'MP3 RÁPIDO ⚡'
+          argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '9', ...ARGS_VELOCIDAD]
+        } else {
+          etiquetaModo = 'MP3'
+          argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '2', ...ARGS_VELOCIDAD]
+        }
       }
 
       // 3) Caché
@@ -378,22 +367,19 @@ export default {
         (desdeCache ? `\n𖣣ֶㅤ֯⌗ ⚡  ⬭ *Desde caché (instantáneo)*` : '')
 
       if (!esVideo) {
-        const a = tipoAudio(buf)
-        const nombre = `${limpiarNombre(titulo)}.${a.ext}`
-        
-        // Agregar portada y metadatos al MP3 si ffmpeg está disponible (excepto en modo fast para no perder velocidad)
+        // Agregar portada PERSONALIZADA en TODOS los audios (incluso fast, ya que es una copia local sin descargar nada)
         let audioFinal = buf;
-        const ffmpegOk = !esFast && await isFfmpegAvailable();
-        if (ffmpegOk && a.ext === 'mp3' && info.thumbnail) {
+        const ffmpegOk = await isFfmpegAvailable();
+        if (ffmpegOk) {
           try {
-            await sock.sendMessage(msg.chat, { react: { text: '🖼️', key: msg.key } });
-            audioFinal = await addCoverToMp3(buf, info.thumbnail, titulo, info.uploader || 'YouTube');
+            await msg.react('🖼️');
+            audioFinal = await addCoverToMp3(buf, titulo);
           } catch {}
         }
-        
+        const nombre = `${limpiarNombre(titulo)}.mp3`;
         await sock.sendMessage(msg.chat, {
           audio: audioFinal,
-          mimetype: a.mimetype,
+          mimetype: 'audio/mpeg',
           fileName: nombre,
           ptt: false
         }, { quoted: msg })
