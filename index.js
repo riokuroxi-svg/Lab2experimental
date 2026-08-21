@@ -6,6 +6,8 @@ import events from '#events';
 import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, jidDecode, DisconnectReason } from 'baileys';
 import { useSQLiteAuthState } from '#lib/sqliteAuth';
 import { ritmoHumano } from '#lib/humanize';
+import { decidirAnteError } from '#lib/processGuard';
+import { startSessionBackup } from '#lib/backupSessions';
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import chalk from "chalk";
@@ -441,10 +443,15 @@ cleanCache();
   await cmdsLoader();
   await startBot();
   await loadBots();
+  startSessionBackup(); // respaldo diario de sesiones (rotativo)
 })();
 
 function onUncaughtException(e) {
   log.error(`ERROR → ${e?.stack || e?.message || e}`);
+  if (decidirAnteError() === 'exit') {
+    log.error('⚠️ Demasiados errores seguidos (posible loop) — cerrando para que el supervisor reinicie limpio...');
+    setTimeout(() => process.exit(1), 1500);
+  }
 }
 function onUnhandledRejection(reason) {
   if (reason instanceof SyntaxError) {
@@ -454,6 +461,10 @@ function onUnhandledRejection(reason) {
     return;
   }
   log.error(`RECHAZO → ${reason?.stack || reason?.message || reason}`);
+  if (decidirAnteError() === 'exit') {
+    log.error('⚠️ Demasiados rechazos seguidos (posible loop) — cerrando para que el supervisor reinicie limpio...');
+    setTimeout(() => process.exit(1), 1500);
+  }
 }
 process.on('uncaughtException', onUncaughtException);
 process.on('unhandledRejection', onUnhandledRejection);

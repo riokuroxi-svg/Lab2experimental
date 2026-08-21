@@ -29,6 +29,13 @@ function registerModule(filePath, mod) {
   const keys = cmds.filter(Boolean).length > 0 ? cmds.filter(Boolean).map(c => c.toLowerCase()) : cmd.customPrefix ? [key.split('/').pop().toLowerCase()] : [];
   if (!keys.length) return;
   for (const c of keys) {
+    // Aviso temprano de conflictos: si otro plugin ya registró este
+    // comando, lo vemos en consola en vez de descubrirlo "de casualidad"
+    // (el último en cargar gana, igual que antes — solo avisamos).
+    const existente = global.comandos.get(c);
+    if (existente && existente.pluginKey !== key) {
+      console.log(chalk.yellow(`[ ⚠ ] Comando duplicado: '${c}' ya lo registra '${existente.pluginKey}' → ahora lo sobrescribe '${key}'`));
+    }
     global.comandos.set(c, {
       pluginKey: key,
       run: cmd.run,
