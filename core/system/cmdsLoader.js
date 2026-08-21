@@ -38,6 +38,14 @@ function registerModule(filePath, mod) {
       isAdmin: cmd.isAdmin ?? false,
       botAdmin: cmd.botAdmin ?? false,
       customPrefix: cmd.customPrefix ?? null,
+      // ── Flags declarativos nuevos (sistema de permisos centralizado de main.js) ──
+      ownerOnly: cmd.ownerOnly ?? false,
+      modOnly: cmd.modOnly ?? false,
+      adminOnly: cmd.adminOnly ?? false,
+      premiumOnly: cmd.premiumOnly ?? false,
+      groupOnly: cmd.groupOnly ?? false,
+      privateOnly: cmd.privateOnly ?? false,
+      botAdminRequired: cmd.botAdminRequired ?? false,
     });
   }
 }
