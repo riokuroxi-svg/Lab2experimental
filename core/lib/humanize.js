@@ -22,18 +22,22 @@
 //
 //  Variables .env (todas opcionales):
 //   GINKO_ANTIBAN=off            → desactiva ritmo y retraso humano
-//   GINKO_HUMAN_DELAY_MS=1200    → retraso aleatorio máximo (ms) antes
-//                                  de responder (0-5000)
-//   GINKO_HUMAN_PACE_MS=600      → espacio mínimo entre envíos
-//                                  consecutivos al mismo chat (0-3000)
+//   GINKO_HUMAN_DELAY_MS=500     → retraso aleatorio máximo (ms) antes
+//                                  de responder (0-5000). 500 = media de
+//                                  250ms: imperceptible pero muestra el
+//                                  "escribiendo..." un instante.
+//   GINKO_HUMAN_PACE_MS=350      → espacio mínimo entre mensajes VISIBLES
+//                                  consecutivos al mismo chat (0-3000).
+//                                  Las reacciones/deletes no se espacian
+//                                  (el bot se siente ágil).
 // ════════════════════════════════════════════════════════════
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const antibanOn = (process.env.GINKO_ANTIBAN || 'on').toLowerCase() !== 'off'
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max)
-const maxDelayMs = clamp(parseInt(process.env.GINKO_HUMAN_DELAY_MS || '1200', 10) || 1200, 0, 5000)
-const paceMs = clamp(parseInt(process.env.GINKO_HUMAN_PACE_MS || '600', 10) || 600, 0, 3000)
+const maxDelayMs = clamp(parseInt(process.env.GINKO_HUMAN_DELAY_MS || '500', 10) || 500, 0, 5000)
+const paceMs = clamp(parseInt(process.env.GINKO_HUMAN_PACE_MS || '350', 10) || 350, 0, 3000)
 const jitter = (max) => Math.floor(Math.random() * (max + 1))
 
 export const humanizeConfig = { antibanOn, maxDelayMs, paceMs }

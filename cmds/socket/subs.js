@@ -107,7 +107,8 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
   {
     const origSend = socks.sendMessage.bind(socks)
     socks.sendMessage = async (jid, content, opts) => {
-      await ritmoHumano(jid)
+      const esInterno = content?.react || content?.delete
+      if (!esInterno) await ritmoHumano(jid)
       return origSend(jid, content, opts)
     }
   }

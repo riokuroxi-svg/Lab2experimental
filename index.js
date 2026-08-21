@@ -302,7 +302,10 @@ export async function startBot() {
   // Ver: WhiskeySockets/Baileys issues #1643, #1701, #1571
   const origSendMessage = sock.sendMessage.bind(sock);
   sock.sendMessage = async (jid, content, opts) => {
-    await ritmoHumano(jid); // espaciado humano entre envíos seguidos al mismo chat
+    // Ritmo humano SOLO para mensajes visibles (reacciones/deletes son
+    // señales internas rápidas y no deben retrasarse → bot ágil).
+    const esInterno = content?.react || content?.delete
+    if (!esInterno) await ritmoHumano(jid)
     const result = await origSendMessage(jid, content, opts);
     try {
       if (result?.key?.id) {
