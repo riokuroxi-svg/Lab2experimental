@@ -289,7 +289,7 @@ async function ejecutarDescarga(sock, job, modo, m) {
       let segundos = 0
       try {
         await sock.sendMessage(chat,{react:{text:'🖼️',key:m.key}})
-        const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(job.title))
+        const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(job.title), 'Ginko Bot', 128, ytdlpDisponible ? 'local' : 'api')
         finalBuf = procesado.buffer
         segundos = procesado.seconds || 0
       } catch (e) { console.log('[play] Error procesando MP3:', e.message) }
@@ -362,7 +362,7 @@ const cmd = {
           let segundos = 0
           try {
             await sock.sendMessage(msg.chat,{react:{text:'🖼️',key:msg.key}})
-            const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(title))
+            const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(title), 'Ginko Bot', 128, ytdlpDisponible ? 'local' : 'api')
             finalBuf = procesado.buffer
             segundos = procesado.seconds || 0
           } catch (e) { console.log('[play] Error procesando MP3:', e.message) }

@@ -2,7 +2,7 @@ import fs from 'fs';
 import db from '#db';
 
 export default {
-  command: ['getpack', 'pack', 'stickerpack'],
+  command: ['getpack', 'pack'],
   category: 'stickers',
   description: 'Descargar un paquete de stickers.',
   run: async ({ msg, sock, args, usedPrefix, command }) => {

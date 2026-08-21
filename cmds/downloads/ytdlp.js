@@ -355,7 +355,7 @@ export default {
         if (!desdeCache) {
           try {
             await msg.react('🖼️')
-            const procesado = await processMp3ForWhatsApp(buf, titulo, 'Ginko Bot', bitrate)
+            const procesado = await processMp3ForWhatsApp(buf, titulo, 'Ginko Bot', bitrate, 'local')
             audioFinal = procesado.buffer
             segundos = procesado.seconds || 0
             if (audioFinal && audioFinal.length > 1024) {

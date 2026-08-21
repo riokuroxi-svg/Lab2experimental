@@ -1,6 +1,6 @@
 import db from '#db';
 export default {
-  command: ['ritual', 'invoke', 'invocar'],
+  command: ['ritual', 'invoke'],
   category: 'economy',
   description: 'Hacer ritos de invocación.',
   run: async ({ msg, sock, usedPrefix }) => {

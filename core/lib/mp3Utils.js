@@ -59,14 +59,64 @@ async function getOptimizedCover() {
 }
 
 /**
- * Procesa un buffer MP3 para que WhatsApp lo acepte como archivo de música:
- * - Recodifica con libmp3lame (bitrate configurable, default 128k) 44100Hz stereo
- * - Elimina TODOS los metadatos antiguos (yt-dlp agrega tags que pueden estar corruptos)
- * - Agrega la portada personalizada ÓPTIMA (500x500 JPEG < 100KB)
- * - Agrega metadatos limpios ID3v2.3 (title, artist, album)
+ * REMUX rápido: copia el audio sin recodificar y solo incrusta portada +
+ * metadatos limpios. Válido únicamente para MP3 generados por ffmpeg
+ * (descargas locales con yt-dlp). Devuelve null si no valida → el
+ * llamador cae a la recodificación completa (seguridad AUD-xxxx intacta).
+ */
+async function remuxConPortada(inputBuffer, safeTitle, artista, coverPath) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-remux-'));
+  const inPath = path.join(tmpDir, 'input.mp3');
+  const outPath = path.join(tmpDir, 'final.mp3');
+  try {
+    fs.writeFileSync(inPath, inputBuffer);
+    const hasCover = fs.existsSync(coverPath);
+
+    const args = ['-y', '-i', inPath];
+    if (hasCover) args.push('-i', coverPath);
+    args.push('-map', '0:a');
+    if (hasCover) {
+      args.push('-map', '1:v', '-c:v', 'mjpeg', '-disposition:v', 'attached_pic',
+        '-metadata:s:v', 'comment=Cover (front)', '-metadata:s:v', 'title=Album cover');
+    }
+    args.push(
+      '-c:a', 'copy',            // ⚡ NO recodificar: el audio de yt-dlp ya es limpio
+      '-id3v2_version', '3',
+      '-map_metadata', '-1',
+      '-metadata', `title=${safeTitle}`,
+      '-metadata', `artist=${artista}`,
+      '-metadata', 'album=Ginko Bot',
+      '-avoid_negative_ts', 'make_zero',
+      outPath,
+    );
+
+    await exec('ffmpeg', args, { timeout: 60000, maxBuffer: 10 * 1024 * 1024 });
+    if (!fs.existsSync(outPath)) return null;
+
+    const finalBuf = fs.readFileSync(outPath);
+    if (!isMp3Valid(finalBuf)) return null;
+
+    const seconds = await getMp3Duration(outPath);
+    return { buffer: finalBuf, seconds };
+  } catch (e) {
+    console.log('[mp3Utils] remux rápido falló:', e.message?.slice(0, 120));
+    return null;
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+/**
+ * Procesa un buffer MP3 para que WhatsApp lo acepte como archivo de música.
+ * - origen 'local' (audio descargado con yt-dlp, ya limpio de ffmpeg):
+ *   REMUX rápido — copia el audio sin recodificar y solo incrusta portada
+ *   y metadatos (~0.1s vs ~6s). Si el resultado no valida, cae
+ *   automáticamente a la recodificación completa.
+ * - origen 'api' (APIs públicas, MP3s con headers posibles rotos):
+ *   RECODIFICACIÓN completa con libmp3lame (fix del AUD-xxxx).
  * Devuelve { buffer, seconds }
  */
-export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Ginko Bot', bitrateKbps = 128) {
+export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Ginko Bot', bitrateKbps = 128, origen = 'api') {
   // Verificar que ffmpeg está disponible
   try {
     await exec('ffmpeg', ['-version'], { timeout: 5000 });
@@ -76,6 +126,14 @@ export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Gink
 
   const coverPath = await getOptimizedCover();
   const hasCover = fs.existsSync(coverPath);
+  const safeTitle = String(titulo || 'Audio').slice(0, 200);
+
+  // ── Vía rápida: remux para audio local ya limpio ──
+  if (origen === 'local') {
+    const rapido = await remuxConPortada(inputBuffer, safeTitle, artista, coverPath);
+    if (rapido) return rapido;
+    console.log('[mp3Utils] remux no válido → recodificación completa de respaldo');
+  }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-mp3-'));
   const inPath = path.join(tmpDir, 'input.mp3');
@@ -120,7 +178,6 @@ export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Gink
     }
 
     // Metadatos limpios
-    const safeTitle = String(titulo || 'Audio').slice(0, 200);
     args.push(
       '-metadata', `title=${safeTitle}`,
       '-metadata', `artist=${artista}`,
@@ -168,9 +225,10 @@ export async function addCustomCoverToMp3(inputBuffer, titulo, artista) {
 export async function downloadAudioYtdlp(url, modo = 'fast', ytdlpPath = 'yt-dlp') {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-dl-'));
   const outTemplate = path.join(tmpDir, 'audio.%(ext)s');
-  let audioQuality = '5'; // 128kbps por defecto (equivalente a -b:a 128k)
+  let audioQuality = '5'; // ~128k por defecto (modo fast usa 9 = ~96k)
   if (modo === 'mp3') audioQuality = '0'; // 320k
-  if (modo === 'normal') audioQuality = '2'; // ~192k
+  if (modo === 'normal') audioQuality = '5'; // ~128k
+  if (modo === 'fast') audioQuality = '9'; // ~96k (ligero)
 
   const args = [
     '-f', 'bestaudio/best',
