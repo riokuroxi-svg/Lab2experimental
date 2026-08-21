@@ -233,8 +233,17 @@ async function procesarRespuesta(sock, m) {
   else if (nfrm?.paramsJson) { try { const p=JSON.parse(typeof nfrm.paramsJson==='string'?nfrm.paramsJson:'{}'); selectedId=String(p.id||'') } catch {}; ctxStanzaId=irm?.contextInfo?.stanzaId||nfrm.contextInfo?.stanzaId||'' }
   else if (irm?.body?.text) selectedId=String(irm.body.text)
   if (selectedId) {
+    // 1) Match por token único de tarjeta (ID dinámico bien usado)
+    const token = selectedId.match(/^(gk_[a-z0-9]+)_(?:pa|pv|pad|pvd)$/i)?.[1]
+    if (token) {
+      const jobId = sock._ginkoPlayTokens?.get(token)
+      const job = jobId ? pending.get(jobId) : null
+      if (job && !job._procesando && !job._completado) { await ejecutarDescarga(sock, job, selectedId, m); return }
+    }
+    // 2) Match por contextInfo.stanzaId (lo que WhatsApp incluye siempre)
     const job = ctxStanzaId ? pending.get(ctxStanzaId) : null
     if (job && !job._procesando && !job._completado) { await ejecutarDescarga(sock, job, selectedId, m); return }
+    // 3) Último recurso: última tarjeta pendiente del chat
     if (!ctxStanzaId) {
       const chat=m.key.remoteJid
       for (const [,j] of Array.from(pending.entries()).reverse()) if (j.chat===chat && !j._procesando && !j._completado) { await ejecutarDescarga(sock,j,selectedId,m); return }
@@ -260,10 +269,10 @@ async function ejecutarDescarga(sock, job, modo, m) {
   const chat=job.chat
   const id=String(modo||'').toLowerCase()
   let tipo='audio', comoDoc=false
-  if (id==='__ginko_pad'||id==='audiodoc'||id==='4'||id==='📄') { tipo='audio'; comoDoc=true }
-  else if (id==='__ginko_pa'||id==='audio'||id==='1'||id==='mp3'||id==='👍'||id==='🎵') { tipo='audio'; comoDoc=false }
-  else if (id==='__ginko_pvd'||id==='videodoc'||id==='3'||id==='📁') { tipo='video'; comoDoc=true }
-  else if (id==='__ginko_pv'||id==='video'||id==='2'||id==='mp4'||id==='❤️'||id==='🎬') { tipo='video'; comoDoc=false }
+  if (id.endsWith('_pad')||id==='audiodoc'||id==='4'||id==='📄') { tipo='audio'; comoDoc=true }
+  else if (id.endsWith('_pa')||id==='audio'||id==='1'||id==='mp3'||id==='👍'||id==='🎵') { tipo='audio'; comoDoc=false }
+  else if (id.endsWith('_pvd')||id==='videodoc'||id==='3'||id==='📁') { tipo='video'; comoDoc=true }
+  else if (id.endsWith('_pv')||id==='video'||id==='2'||id==='mp4'||id==='❤️'||id==='🎬') { tipo='video'; comoDoc=false }
 
   const emoji = tipo==='audio'?(comoDoc?'📄':'🎵'):(comoDoc?'📁':'🎬')
   try { await sock.sendMessage(chat, {react:{text:emoji,key:m.key}}) } catch {}
@@ -304,7 +313,7 @@ async function ejecutarDescarga(sock, job, modo, m) {
     }
     job._completado=true
     try { await sock.sendMessage(chat,{react:{text:'✅',key:job._commandKey||m.key}}) } catch {}
-    setTimeout(()=>getPendingMap(sock).delete(job.cardId), 60000)
+    setTimeout(()=>{getPendingMap(sock).delete(job.cardId); try{sock._ginkoPlayTokens?.delete(job._token)}catch{}}, 60000)
   } catch(e) {
     job._procesando=false
     if (e?.semaforo) {
@@ -382,16 +391,21 @@ const cmd = {
       const usarBotones = !esIphone(msg)
       const infoTxt = `🎬 *RESULTADO*\n\n> ❖ Título › *${title}*\n> ❖ Canal › *${channel}*\n> ⴵ Duración › *${duration}*\n${views&&views!=='0'?`> ❀ Vistas › *${views}*\n`:''}${ago?`> ✩ Publicado › *${ago}*\n`:''}> ❒ Enlace › ${url}\n${ytdlpDisponible?'\n⚡ Descarga rápida con yt-dlp\n':'\n'}`
       const caption = usarBotones ? infoTxt+`🟢 Toca un botón:\n\n🔵 Si no funciona, cita el mensaje y escribe:\n*1* = audio 🎵\n*2* = video 🎬\n*3* = video como doc 📁\n*4* = audio como doc 📄` : infoTxt+`🟡 Reacciona con 👍 = audio, ❤️ = video`
+      // ID único por tarjeta: el token permite emparejar el tap con SU
+      // tarjeta aunque WhatsApp no incluya stanzaId o haya varias
+      // tarjetas pendientes en el mismo chat.
+      const cardToken = `gk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
       const botones = usarBotones ? [
-        {buttonId:'__ginko_pa', buttonText:{displayText: ytdlpDisponible?'🎵 Audio ⚡':'🎵 Audio MP3'}, type:1},
-        {buttonId:'__ginko_pv', buttonText:{displayText:'🎬 Video MP4'}, type:1}
+        {buttonId:`${cardToken}_pa`, buttonText:{displayText: ytdlpDisponible?'🎵 Audio ⚡':'🎵 Audio MP3'}, type:1},
+        {buttonId:`${cardToken}_pv`, buttonText:{displayText:'🎬 Video MP4'}, type:1}
       ] : []
       const payload = usarBotones&&thumbnail ? {image:{url:thumbnail},caption,footerText:'❦ Ginko-MD',buttons:botones,headerType:4} : thumbnail ? {image:{url:thumbnail},caption} : {text:caption}
       let card
       try { card = await sock.sendMessage(msg.chat,payload,{quoted:msg}) } catch { card = await sock.sendMessage(msg.chat,thumbnail?{image:{url:thumbnail},caption}:{text:caption},{quoted:msg}).catch(async()=>await sock.sendMessage(msg.chat,{text:caption},{quoted:msg})) }
       if (!card?.key?.id) return msg.reply('❌ No se pudo enviar la tarjeta.')
-      getPendingMap(sock).set(card.key.id, {cardId:card.key.id, cardKey:card.key, chat:msg.chat, url, videoId:foundVid, title, channel, duration, views, ago, thumbnail, usandoYtdlp:ytdlpDisponible, _commandKey:msg.key, _createdAt:Date.now(), _procesando:false, _completado:false})
-      setTimeout(()=>{const p=getPendingMap(sock); const j=p.get(card.key.id); if(j&&!j._procesando&&!j._completado)p.delete(card.key.id)}, PENDING_TTL_MS)
+      getPendingMap(sock).set(card.key.id, {cardId:card.key.id, cardKey:card.key, chat:msg.chat, url, videoId:foundVid, title, channel, duration, views, ago, thumbnail, usandoYtdlp:ytdlpDisponible, _commandKey:msg.key, _createdAt:Date.now(), _procesando:false, _completado:false, _token:cardToken})
+      ;(sock._ginkoPlayTokens ??= new Map()).set(cardToken, card.key.id)
+      setTimeout(()=>{const p=getPendingMap(sock); const j=p.get(card.key.id); if(j&&!j._procesando&&!j._completado){p.delete(card.key.id); try{sock._ginkoPlayTokens?.delete(j._token)}catch{}}}, PENDING_TTL_MS)
       try { await sock.sendMessage(msg.chat,{react:{text:'✅',key:msg.key}}) } catch {}
     } catch(e) {
       try { await sock.sendMessage(msg.chat,{react:{text:'❌',key:msg.key}}) } catch {}
@@ -399,4 +413,5 @@ const cmd = {
     }
   }
 }
+export { procesarRespuesta }
 export default cmd
