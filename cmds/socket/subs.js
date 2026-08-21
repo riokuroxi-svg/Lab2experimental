@@ -1,5 +1,6 @@
 import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode } from 'baileys';
 import { useSQLiteAuthState } from '#lib/sqliteAuth';
+import { ritmoHumano } from '#lib/humanize';
 import NodeCache from 'node-cache';
 import main from '#main';
 import events from '#events';
@@ -102,6 +103,14 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
     getMessage: async (key) => msgStore.get(key.remoteJid + ':' + key.id),
   });
   patchGroupMetadata(socks);
+  // Ritmo humano de envío también para sub-bots (misma lógica del principal)
+  {
+    const origSend = socks.sendMessage.bind(socks)
+    socks.sendMessage = async (jid, content, opts) => {
+      await ritmoHumano(jid)
+      return origSend(jid, content, opts)
+    }
+  }
   socks.msgRetryCounterCache = msgRetryCounterCache;
   socks.isCommand = isCommand;
   socks.senderId = senderId;

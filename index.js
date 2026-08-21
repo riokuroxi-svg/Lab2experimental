@@ -5,6 +5,7 @@ import main from '#main';
 import events from '#events';
 import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, jidDecode, DisconnectReason } from 'baileys';
 import { useSQLiteAuthState } from '#lib/sqliteAuth';
+import { ritmoHumano } from '#lib/humanize';
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import chalk from "chalk";
@@ -301,6 +302,7 @@ export async function startBot() {
   // Ver: WhiskeySockets/Baileys issues #1643, #1701, #1571
   const origSendMessage = sock.sendMessage.bind(sock);
   sock.sendMessage = async (jid, content, opts) => {
+    await ritmoHumano(jid); // espaciado humano entre envíos seguidos al mismo chat
     const result = await origSendMessage(jid, content, opts);
     try {
       if (result?.key?.id) {

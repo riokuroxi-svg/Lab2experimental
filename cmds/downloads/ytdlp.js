@@ -34,6 +34,7 @@ import { fileURLToPath } from 'url'
 // Usar fetch nativo de Node.js
 const fetch = globalThis.fetch
 import { downloadAudioYtdlp, processMp3ForWhatsApp, getMp3Duration, isMp3Valid } from '#lib/mp3Utils'
+import { adquirir } from '#lib/humanize'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -236,7 +237,9 @@ export default {
     const esMp3 = /^mp3$/.test(modo)
     const esFast = /^(fast|rapido|ligero|lite)$/.test(modo)
 
+    let liberar = null
     try {
+      liberar = await adquirir('descargas', 2) // máx 2 descargas simultáneas en todo el bot
       await msg.react('🕒')
 
       // 1) Metadatos (rápido, no descarga nada)
@@ -392,6 +395,9 @@ export default {
 
       await msg.react('✅')
     } catch (e) {
+      if (e?.semaforo) {
+        return msg.reply('⏳ Ya hay 2 descargas en curso, espera un momento e inténtalo de nuevo.')
+      }
       await msg.react('❌')
       console.log(`[ytdlp] error: ${e.message}`)
       await msg.reply(
@@ -399,6 +405,8 @@ export default {
         `*Tips:* ¿yt-dlp está instalado? ¿ffmpeg (solo necesario para mp3)? ` +
         `Comprueba con \`yt-dlp --version\` y \`ffmpeg -version\`.`
       )
+    } finally {
+      if (liberar) liberar()
     }
   }
 }

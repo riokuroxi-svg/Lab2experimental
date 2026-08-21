@@ -5,6 +5,7 @@ import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
+import { adquirir } from '#lib/humanize'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -255,6 +256,7 @@ async function procesarRespuesta(sock, m) {
 
 async function ejecutarDescarga(sock, job, modo, m) {
   job._procesando=true
+  let liberar = null
   const chat=job.chat
   const id=String(modo||'').toLowerCase()
   let tipo='audio', comoDoc=false
@@ -268,6 +270,7 @@ async function ejecutarDescarga(sock, job, modo, m) {
   const estadoMsg = await sock.sendMessage(chat, {text:`⏳ Descargando ${tipo}...\n> *${job.title}*`}, {quoted:m}).catch(()=>null)
 
   try {
+    liberar = await adquirir('descargas', 2) // máx 2 descargas simultáneas en todo el bot
     let buffer
     if (tipo==='audio') {
       buffer = ytdlpDisponible ? await descargarAudioYtdlp(job.url,'fast') : (await descargarAudioApi(job.url)).buffer
@@ -304,9 +307,16 @@ async function ejecutarDescarga(sock, job, modo, m) {
     setTimeout(()=>getPendingMap(sock).delete(job.cardId), 60000)
   } catch(e) {
     job._procesando=false
+    if (e?.semaforo) {
+      if (estadoMsg?.key) try { await sock.sendMessage(chat,{delete:estadoMsg.key}) } catch {}
+      await sock.sendMessage(chat,{text:'⏳ Ya hay 2 descargas en curso, espera un momento e inténtalo de nuevo.'},{quoted:m})
+      return
+    }
     if (estadoMsg?.key) try { await sock.sendMessage(chat,{delete:estadoMsg.key}) } catch {}
     await sock.sendMessage(chat,{text:`❌ *Error:* ${e?.message||e}\n\n> Prueba otro enlace.`},{quoted:m})
     try { await sock.sendMessage(chat,{react:{text:'❌',key:job._commandKey||m.key}}) } catch {}
+  } finally {
+    if (liberar) liberar()
   }
 }
 

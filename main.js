@@ -5,6 +5,7 @@ import fs from "fs";
 import path from 'path';
 import { getCachedMeta, setCachedMeta, BoundedMap } from '#serialize';
 import db from '#db';
+import { flujoPresencia } from '#lib/humanize';
 
 const prefixCache = new BoundedMap(300, 0);
 function getBotPrefixRegex(botJid, settings) {
@@ -75,6 +76,11 @@ export default async (sock, msg) => {
   const botBase = botJid.split('@')[0];
   const isBotAdmins = msg.isGroup ? adminSet.has(botBase) : false;
   const isAdmins = msg.isGroup ? adminSet.has(senderBase) : false;
+
+  // Marcar TODOS los mensajes como leídos — incluidos los taps de botones
+  // y reacciones que procesan los plugins "all" (comportamiento normal de
+  // un cliente real; antes esos taps quedaban sin doble check azul).
+  if (msg.key) { try { sock.readMessages([msg.key]) } catch {} }
 
   Promise.allSettled((global.cmdsExecute ?? []).filter(p => p.type === 'all').map(p => p.fn({ msg, sock, groupMetadata, participants, isAdmins, isBotAdmins, isOwner, __dirname: p.dirname }).catch(e => console.error(chalk.gray(`[ ✿ ] Error all-plugin ${p.key}: ${e.message}`)))));
 
@@ -185,7 +191,6 @@ export default async (sock, msg) => {
   if (cmdData.isAdmin && !isAdmins) return sock.reply(msg.chat, '《✧》 Este comando solo puede ser ejecutado por los Administradores del Grupo.', msg);
   if (cmdData.botAdmin && !isBotAdmins) return sock.reply(msg.chat, '《✧》 Este comando solo puede ser ejecutado si el Socket es Administrador del Grupo.', msg);
   try {
-    await sock.sendPresenceUpdate('composing', msg.chat);
     await sock.readMessages([msg.key]);
     user.usedcommands = (user.usedcommands || 0) + 1;
     user.exp = (user.exp || 0) + Math.floor(Math.random() * 100);
@@ -201,7 +206,9 @@ export default async (sock, msg) => {
     db.setChatUser(msg.chat, sender, 'stats', users.stats);
     settings.commandsejecut = (settings.commandsejecut || 0) + 1;
     db.setSettings(botJid, 'commandsejecut', settings.commandsejecut);
-    await cmdData.run({ msg, sock, args, usedPrefix, command, text, groupMetadata, participants, isAdmins, isBotAdmins, isOwner, __dirname: global.plugins[cmdData.pluginKey]?.dirname });
+    // Flujo de presencia humano: composing → pequeño retraso aleatorio
+    // (como quien escribe) → ejecutar → paused. Configurable en .env.
+    await flujoPresencia(sock, msg.chat, () => cmdData.run({ msg, sock, args, usedPrefix, command, text, groupMetadata, participants, isAdmins, isBotAdmins, isOwner, __dirname: global.plugins[cmdData.pluginKey]?.dirname }));
   } catch (error) {
     await sock.sendMessage(msg.chat, { text: `《✧》 Error al ejecutar el comando ${command}.\n\n${error}` }, { quoted: msg });
   }
