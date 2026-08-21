@@ -33,7 +33,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 // Usar fetch nativo de Node.js
 const fetch = globalThis.fetch
-import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
+import { downloadAudioYtdlp, processMp3ForWhatsApp, getMp3Duration, isMp3Valid } from '#lib/mp3Utils'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -105,7 +105,7 @@ function limpiarCache() {
   } catch { /* la caché nunca debe tumbar el comando */ }
 }
 
-const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web,web_embedded', '--no-check-certificates']
+const ARGS_VELOCIDAD = ['-N', '8', '--no-playlist', '--extractor-args', 'youtube:player_client=android,web,web_embedded']
 
 // ════════════════════════════════════════════════════════════
 //  AUTO-UPDATE (cero mantenimiento)
@@ -222,7 +222,7 @@ export default {
         `*${usedPrefix}ytdlp* <enlace>          → video (≤720p)\n` +
         `*${usedPrefix}ytdlp* <enlace> audio    → canción MP3 con portada personalizada ⚡\n` +
         `*${usedPrefix}ytdlp* <enlace> mp3      → mp3 320k con portada\n` +
-        `*${usedPrefix}ytdlp* <enlace> fast     → mp3 rápido, máxima velocidad\n\n` +
+        `*${usedPrefix}ytdlp* <enlace> fast     → mp3 96k ligero, máxima velocidad\n\n` +
         `Ejemplo: *${usedPrefix}ytdlp* https://youtu.be/xxxx audio`
       )
     }
@@ -254,7 +254,7 @@ export default {
       const id = info.id || hashUrl(url)
 
       // 2) Estrategia según el modo
-      let argsDesc, ext, esVideo = false, etiquetaModo
+      let argsDesc, ext, esVideo = false, etiquetaModo, bitrate = 128, modoTag = ''
       if (!esAudio && !esMp3 && !esFast) {
         esVideo = true
         ext = 'mp4'
@@ -269,18 +269,24 @@ export default {
         ext = 'mp3'
         if (esMp3) {
           etiquetaModo = 'MP3 320k'
+          bitrate = 320
+          modoTag = 'mp3'
           argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0', ...ARGS_VELOCIDAD]
         } else if (esFast) {
-          etiquetaModo = 'MP3 RÁPIDO ⚡'
+          etiquetaModo = 'MP3 96k LIGERO ⚡'
+          bitrate = 96
+          modoTag = 'fast'
           argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '9', ...ARGS_VELOCIDAD]
         } else {
-          etiquetaModo = 'MP3'
+          etiquetaModo = 'MP3 128k'
+          bitrate = 128
+          modoTag = 'normal'
           argsDesc = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '2', ...ARGS_VELOCIDAD]
         }
       }
 
-      // 3) Caché
-      const rutaCache = path.join(CACHE_DIR, `${id}.${ext}`)
+      // 3) Caché (los audios se guardan YA procesados, con etiqueta de modo)
+      const rutaCache = path.join(CACHE_DIR, `${id}${esVideo ? '' : '-' + modoTag}.${ext}`)
       limpiarCache()
       let buf = null
       let desdeCache = false
@@ -319,9 +325,9 @@ export default {
               throw e;
             }
           } else {
-            // Audio: usar la función que descarga a archivo temporal (sin corrupción)
-            buf = await downloadAudioYtdlp(url, esFast ? 'fast' : esMp3 ? 'mp3' : 'normal', YTDLP);
-            try { fs.writeFileSync(rutaCache, buf) } catch {}
+            // Audio: descargar a archivo temporal (sin corrupción).
+            // La caché se escribe DESPUÉS de procesar, ya con el MP3 final.
+            buf = await downloadAudioYtdlp(url, esFast ? 'fast' : esMp3 ? 'mp3' : 'normal', YTDLP)
           }
           if (!buf || buf.length < 1024) throw new Error('El archivo descargado está vacío')
         } finally {
@@ -339,16 +345,24 @@ export default {
         (desdeCache ? `\n𖣣ֶㅤ֯⌗ ⚡  ⬭ *Desde caché (instantáneo)*` : '')
 
       if (!esVideo) {
-        // Procesar MP3 para que WhatsApp lo acepte con portada y nombre correcto
-        let audioFinal = buf;
-        let segundos = 0;
-        try {
-          await msg.react('🖼️');
-          const procesado = await processMp3ForWhatsApp(buf, titulo);
-          audioFinal = procesado.buffer;
-          segundos = procesado.seconds || 0;
-        } catch (e) {
-          console.log('[ytdlp] Error procesando MP3:', e.message);
+        // Procesar MP3 para que WhatsApp lo acepte con portada y nombre correcto.
+        // Si viene de caché ya está procesado → solo medimos duración (instantáneo).
+        let audioFinal = buf
+        let segundos = 0
+        if (!desdeCache) {
+          try {
+            await msg.react('🖼️')
+            const procesado = await processMp3ForWhatsApp(buf, titulo, 'Ginko Bot', bitrate)
+            audioFinal = procesado.buffer
+            segundos = procesado.seconds || 0
+            if (audioFinal && audioFinal.length > 1024) {
+              try { fs.writeFileSync(rutaCache, audioFinal) } catch { /* sin caché, no pasa nada */ }
+            }
+          } catch (e) {
+            console.log('[ytdlp] Error procesando MP3:', e.message)
+          }
+        } else {
+          segundos = await getMp3Duration(rutaCache)
         }
         const nombre = `${limpiarNombre(titulo)}.mp3`;
         const payload = {

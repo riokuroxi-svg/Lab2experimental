@@ -1,4 +1,5 @@
-import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode, useMultiFileAuthState } from 'baileys';
+import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode } from 'baileys';
+import { useSQLiteAuthState } from '#lib/sqliteAuth';
 import NodeCache from 'node-cache';
 import main from '#main';
 import events from '#events';
@@ -72,7 +73,7 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
   ensureDir(subsPath);
   const sessionFolder = path.join(subsPath, id);
   const senderId = msg?.sender;
-  const { state, saveCreds: saveCredsDB } = await useMultiFileAuthState(sessionFolder);
+  const { state, saveCreds: saveCredsDB } = await useSQLiteAuthState(sessionFolder);
   const version = await getVersion();
   let saveCredsTimer = null;
   const saveCreds = () => { clearTimeout(saveCredsTimer); saveCredsTimer = setTimeout(saveCredsDB, 2000); };

@@ -3,7 +3,8 @@ import "dotenv/config";
 import "./settings.js";
 import main from '#main';
 import events from '#events';
-import makeWASocket, { Browsers, makeCacheableSignalKeyStore, useMultiFileAuthState, fetchLatestBaileysVersion, jidDecode, DisconnectReason } from 'baileys';
+import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, jidDecode, DisconnectReason } from 'baileys';
+import { useSQLiteAuthState } from '#lib/sqliteAuth';
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import chalk from "chalk";
@@ -31,7 +32,8 @@ let phoneNumber = "";
 let phoneInput = "";
 const methodCodeQR = process.argv.includes("--qr");
 const methodCodeArg = process.argv.includes("code");
-const hasSessionFile = fs.existsSync("./Sessions/Owner/creds.json");
+// Sesión válida = auth.db (SQLite) o creds.json antiguo (se migra solo al arrancar)
+const hasSessionFile = fs.existsSync("./Sessions/Owner/auth.db") || fs.existsSync("./Sessions/Owner/creds.json");
 
 // Método de vinculación por variable de entorno (.env): PAIRING_METHOD=code y PAIRING_NUMBER=52...
 const envMethod = (process.env.PAIRING_METHOD || "").trim().toLowerCase();
@@ -247,7 +249,7 @@ export async function startBot() {
   if (isRestarting) return;
   isRestarting = true;
   bootTime = Date.now();
-  const { state, saveCreds: saveCredsDB } = await useMultiFileAuthState('./Sessions/Owner');
+  const { state, saveCreds: saveCredsDB } = await useSQLiteAuthState('./Sessions/Owner');
   const version = await getVersion();
   let saveCredsTimer = null;
   const saveCreds = () => { clearTimeout(saveCredsTimer); saveCredsTimer = setTimeout(saveCredsDB, 2000); };

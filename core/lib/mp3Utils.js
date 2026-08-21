@@ -60,13 +60,13 @@ async function getOptimizedCover() {
 
 /**
  * Procesa un buffer MP3 para que WhatsApp lo acepte como archivo de música:
- * - Recodifica con libmp3lame a 128kbps 44100Hz stereo (formato estándar universal)
+ * - Recodifica con libmp3lame (bitrate configurable, default 128k) 44100Hz stereo
  * - Elimina TODOS los metadatos antiguos (yt-dlp agrega tags que pueden estar corruptos)
  * - Agrega la portada personalizada ÓPTIMA (500x500 JPEG < 100KB)
  * - Agrega metadatos limpios ID3v2.3 (title, artist, album)
  * Devuelve { buffer, seconds }
  */
-export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Ginko Bot') {
+export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Ginko Bot', bitrateKbps = 128) {
   // Verificar que ffmpeg está disponible
   try {
     await exec('ffmpeg', ['-version'], { timeout: 5000 });
@@ -98,10 +98,10 @@ export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Gink
     }
 
     // ⚠️ REC0DIFICAR SIEMPRE (no usar -c copy) para reparar headers Xing/VBR corruptos
-    // y eliminar metadatos antiguos. 128kbps 44100Hz stereo = formato que WhatsApp acepta 100%
+    // y eliminar metadatos antiguos. 44100Hz stereo = formato que WhatsApp acepta 100%
     args.push(
       '-c:a', 'libmp3lame',
-      '-b:a', '128k',
+      '-b:a', `${bitrateKbps}k`,
       '-ar', '44100',
       '-ac', '2',
       '-id3v2_version', '3',      // ID3v2.3: máxima compatibilidad con Android/iOS/WhatsApp
@@ -179,7 +179,6 @@ export async function downloadAudioYtdlp(url, modo = 'fast', ytdlpPath = 'yt-dlp
     '--audio-quality', audioQuality,
     '--no-playlist',
     '--no-warnings',
-    '--no-check-certificates',
     '--extractor-args', 'youtube:player_client=android,web,web_embedded',
     '--no-embed-metadata',       // NO embeber metadatos de YouTube (ffmpeg los pondrá limpios)
     '--no-embed-chapters',
