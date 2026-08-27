@@ -91,3 +91,5 @@ core/lib/rich-ui.js
 ```
 
 Nota Lab2: cuando Instagram entregue solo favicon/data-uri o miniatura débil, `sendInstagramPreview()` puede usar `assets/link-preview-fallback.jpg` como respaldo. Ese respaldo debe ir también como `highQualityThumbnail` real subido con `prepareWAMessageMedia(..., { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })`, no solo como bytes en `jpegThumbnail`.
+
+Investigación favicon: `link-preview-js` sí expone `favicons`, pero WaSocket/Baileys `getUrlInfo()` no los reexpone y el generador normal de `sendMessage` solo mapea `matchedText`, `jpegThumbnail`, `description`, `title` y thumbnail grande. En Lab2 se conserva `favicons`/`favicon` dentro del objeto preview y, si es posible, se prueba `faviconMMSMetadata` usando un `ExtendedTextMessage` estándar por `relayMessage`. Si WhatsApp cliente no muestra ese ícono, no hay garantía de forzarlo desde código sin soporte oficial del cliente.

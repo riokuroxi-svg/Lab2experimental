@@ -124,3 +124,40 @@ test('Instagram fallback prepara highQualityThumbnail subido como thumbnail-link
 
   assert.equal(finalPreview.highQualityThumbnail, image);
 });
+
+
+test('Instagram preview arma metadata MMS para favicon en extendedTextMessage', () => {
+  const mms = __richUiTest.imageMessageToMmsThumbnailMetadata({
+    directPath: '/v/t62.favicon',
+    fileSha256: Buffer.from('sha'),
+    fileEncSha256: Buffer.from('enc'),
+    mediaKey: Buffer.from('key'),
+    mediaKeyTimestamp: 123,
+    height: 32,
+    width: 32,
+  });
+  assert.equal(mms.thumbnailDirectPath, '/v/t62.favicon');
+  assert.equal(mms.thumbnailWidth, 32);
+  assert.equal(mms.thumbnailHeight, 32);
+
+  const content = __richUiTest.buildExtendedTextMessageContent('https://www.instagram.com/', {
+    'matched-text': 'https://www.instagram.com/',
+    title: 'Instagram',
+    description: 'Instagram oficial del proyecto.',
+    jpegThumbnail: Buffer.from('thumb'),
+    highQualityThumbnail: {
+      directPath: '/v/t62.preview',
+      fileSha256: Buffer.from('sha2'),
+      fileEncSha256: Buffer.from('enc2'),
+      mediaKey: Buffer.from('key2'),
+      mediaKeyTimestamp: 456,
+      height: 720,
+      width: 480,
+    },
+    faviconMMSMetadata: mms,
+  });
+
+  assert.equal(content.matchedText, 'https://www.instagram.com/');
+  assert.equal(content.thumbnailDirectPath, '/v/t62.preview');
+  assert.equal(content.faviconMMSMetadata, mms);
+});
