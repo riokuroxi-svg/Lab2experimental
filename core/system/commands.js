@@ -337,6 +337,8 @@ utils: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *UTILITIES* 𐦯╶͜─ׄ�
 > Precio de criptomonedas (BTC, ETH, SOL...).
 ꕤ *$prefixcarbon » $prefixcodigoimg* <tema> + <código>
 > Convertir código en una imagen bonita.
+ꕤ *$prefixrichdemo » $prefixrichui* + <botones|ig|preview|ad|table|ai|all>
+> Probar tarjetas Rich UI experimentales de Lab2.
 ꕤ *$prefixgh » $prefixgithubstalk* + <usuario>
 > Ver información de un usuario de GitHub.
 ╰ׅ͜─֟͜─͜─ٞ͜─͜─๊͜─͜─๋͜─⃔═̶፝֟͜═̶⃔─๋͜─͜─͜─๊͜─ٞ͜─͜─֟͜┈ࠢ͜╯ׅ`,
