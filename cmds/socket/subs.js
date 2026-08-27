@@ -1,4 +1,4 @@
-import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode, generateWAMessageFromContent } from 'baileys';
+import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode, generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys';
 import { useSQLiteAuthState } from '#lib/sqliteAuth';
 import { ritmoHumano } from '#lib/humanize';
 import NodeCache from 'node-cache';
@@ -20,6 +20,7 @@ let commandFlags = {};
 const cleanJid = (jid = '') => jid.replace(/:\d+/, '').split('@')[0];
 const sessionsPath = path.resolve(process.cwd(), 'Sessions');
 const subsPath = path.join(sessionsPath, 'Subs');
+const CODE_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -108,12 +109,21 @@ export async function sendPairingCodeMessage({ sock, jid, code, quoted, validity
   // soporta, caemos a quick-reply clásico sin romper la vinculación.
   try {
     if (!sock?.relayMessage) throw new Error('relayMessage no disponible');
+    let mediaMessage = null;
+    if (fs.existsSync(CODE_BANNER)) {
+      if (typeof sock.waUploadToServer !== 'function') throw new Error('upload no disponible para banner');
+      const prepared = await prepareWAMessageMedia(
+        { image: fs.readFileSync(CODE_BANNER) },
+        { upload: sock.waUploadToServer },
+      );
+      mediaMessage = prepared?.imageMessage || null;
+    }
     const content = {
       viewOnceMessage: {
         message: {
           messageContextInfo: buildCodeMessageContextInfo(),
           interactiveMessage: {
-            header: { title: 'Sub-Bot — Code', subtitle: '', hasMediaAttachment: false },
+            header: { title: 'Sub-Bot — Code', subtitle: '', hasMediaAttachment: Boolean(mediaMessage), ...(mediaMessage ? { imageMessage: mediaMessage } : {}) },
             body: { text: body },
             footer: { text: `Válido por ${validitySeconds} segundos` },
             nativeFlowMessage: {
@@ -143,16 +153,17 @@ export async function sendPairingCodeMessage({ sock, jid, code, quoted, validity
     });
     return { key: generated.key, nativeCopy: true };
   } catch (error) {
-    const fallback = await sock.sendMessage(jid, {
-      text: body,
+    const fallbackPayload = {
+      ...(fs.existsSync(CODE_BANNER) ? { image: fs.readFileSync(CODE_BANNER), caption: body } : { text: body }),
       footerText: `Válido por ${validitySeconds} segundos`,
       buttons: [{
         buttonId: `ginko_copy_code_${copyCode}`,
         buttonText: { displayText: '📋 Copiar Código' },
         type: 1,
       }],
-      headerType: 1,
-    }, { quoted });
+      headerType: fs.existsSync(CODE_BANNER) ? 4 : 1,
+    };
+    const fallback = await sock.sendMessage(jid, fallbackPayload, { quoted });
     return { ...fallback, nativeCopy: false, nativeError: error };
   }
 }

@@ -7,6 +7,8 @@ import {
   sameIdentity,
 } from '../core/lib/jidIdentity.js';
 import { buildPairingCodeMessage } from '../core/lib/pairingCodeMessage.js';
+import { getSelectedResponse } from '../core/lib/interactive-response.js';
+import fs from 'node:fs';
 
 test('minería reconoce al mismo usuario aunque el tap llegue como lid', () => {
   const participants = [{
@@ -51,4 +53,32 @@ test('mensaje .code queda formateado con pasos, separador, código y validez', (
   assert.match(msg, /━━━━━━━━━━━━━━━━━━━━/);
   assert.match(msg, /\*ABCD-1234\*/);
   assert.match(msg, /60 segundos/);
+});
+
+
+test('minería reconoce taps envueltos como interactive nativeFlow', () => {
+  const selected = getSelectedResponse({
+    message: {
+      viewOnceMessage: {
+        message: {
+          interactiveResponseMessage: {
+            nativeFlowResponseMessage: {
+              name: 'quick_reply',
+              paramsJson: JSON.stringify({ id: '__ginko_mine_evabc123_si_roca' }),
+            },
+            contextInfo: { stanzaId: 'msg-evento-1', participant: 'owner@lid' },
+          },
+        },
+      },
+    },
+  });
+  assert.equal(selected.id, '__ginko_mine_evabc123_si_roca');
+  assert.equal(selected.stanzaId, 'msg-evento-1');
+  assert.deepEqual(parseActionButtonId(selected.id, '__ginko_mine_'), {
+    token: 'evabc123', action: 'si', eventId: 'roca',
+  });
+});
+
+test('imagen de .code queda incluida en media', () => {
+  assert.equal(fs.existsSync(new URL('../media/code-banner.jpg', import.meta.url)), true);
 });

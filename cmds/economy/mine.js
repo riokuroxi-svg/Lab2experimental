@@ -1,5 +1,6 @@
 import db from '#db';
 import { geminiGenerate } from '#lib/geminiRole';
+import { getSelectedResponse } from '#lib/interactive-response';
 import {
   addIdentity,
   collectOwnerIdentities,
@@ -41,8 +42,7 @@ function registrarListener(sock) {
     for (const [id, job] of m) if (now - job.ts > PENDING_TTL) m.delete(id);
   }, 60000).unref?.();
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+  sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const m of messages || []) {
       if (!m?.message || !m?.key?.id) continue;
       if (m.key.fromMe) continue;
@@ -59,11 +59,10 @@ async function procesarRespuesta(sock, m) {
   const pending = getPendingMap(sock);
   if (pending.size === 0) return;
 
-  const brm = m.message?.buttonsResponseMessage;
-  const bid = brm?.selectedButtonId;
-  const parsed = parseMineButtonId(bid);
+  const selected = getSelectedResponse(m);
+  const parsed = parseMineButtonId(selected?.id);
   if (!parsed) return;
-  const stanzaId = brm.contextInfo?.stanzaId;
+  const stanzaId = selected?.stanzaId || selected?.contextInfo?.stanzaId || '';
   const job = (stanzaId && pending.get(stanzaId)) || (parsed.token && pending.get(parsed.token));
   if (!job) return;
   if (normalizeIdentityJid(m.key.remoteJid) !== normalizeIdentityJid(job.chatId)) return;
@@ -72,7 +71,7 @@ async function procesarRespuesta(sock, m) {
   // puede entregar el tap como @lid, phoneNumber o id con :device; por eso
   // comparamos todas las identidades conocidas del participante, no solo strings.
   if (String(m.key.remoteJid || '').endsWith('@g.us')) {
-    const responderIds = await collectResponderIdentities(sock, m, job);
+    const responderIds = await collectResponderIdentities(sock, m, job, selected);
     if (!sameIdentity(responderIds, job.ownerIds || [job.userId])) {
       return sock.sendMessage(job.chatId, { text: '✖ Este evento no es tuyo.' }, { quoted: m }).catch(() => {});
     }
