@@ -226,7 +226,7 @@ export async function downloadAudioYtdlp(url, modo = 'fast', ytdlpPath = 'yt-dlp
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-dl-'));
   const outTemplate = path.join(tmpDir, 'audio.%(ext)s');
   let audioQuality = '128K'; // estándar MP3 pasable sin inflar demasiado el archivo
-  if (modo === 'mp3') audioQuality = '192K'; // alta sin peso exagerado para WhatsApp
+  if (modo === 'mp3') audioQuality = '0'; // máxima del origen cuando se pida modo MP3/HQ
   if (modo === 'normal') audioQuality = '128K';
   if (modo === 'fast') audioQuality = '128K';
 
