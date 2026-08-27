@@ -7,6 +7,7 @@ import {
   sameIdentity,
 } from '../core/lib/jidIdentity.js';
 import { buildPairingCodeMessage } from '../core/lib/pairingCodeMessage.js';
+import { __richUiTest } from '../core/lib/rich-ui.js';
 import { getSelectedResponse } from '../core/lib/interactive-response.js';
 import fs from 'node:fs';
 
@@ -81,4 +82,19 @@ test('minería reconoce taps envueltos como interactive nativeFlow', () => {
 
 test('imagen de .code queda incluida en media', () => {
   assert.equal(fs.existsSync(new URL('../media/code-banner.jpg', import.meta.url)), true);
+});
+
+
+test('Instagram preview usa fallback cuando la miniatura real es débil', () => {
+  const weak = {
+    'matched-text': 'https://www.instagram.com/',
+    'canonical-url': 'https://www.instagram.com/',
+    title: 'Instagram',
+    originalThumbnailUrl: 'data:image/png;base64,abc',
+    jpegThumbnail: Buffer.alloc(3730),
+  };
+  assert.equal(__richUiTest.isWeakInstagramThumbnail(weak), true);
+  const finalPreview = __richUiTest.applyInstagramPreviewFallback(weak, 'https://www.instagram.com/');
+  assert.ok(finalPreview.jpegThumbnail.length > weak.jpegThumbnail.length);
+  assert.match(finalPreview.description, /Instagram oficial/);
 });

@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import util from 'node:util';
 import { generateWAMessageFromContent, getUrlInfo, prepareWAMessageMedia } from 'baileys';
 
 const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
+const LINK_PREVIEW_FALLBACK_IMAGE = path.resolve(process.cwd(), 'assets', 'link-preview-fallback.jpg');
 
 export function richUiEnabled() {
   return String(process.env.GINKO_RICH_UI || 'on').toLowerCase() !== 'off';
@@ -54,25 +56,127 @@ function normalizeUrl(url = '') {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
+function isInstagramUrl(url = '') {
+  try {
+    const host = new URL(normalizeUrl(url)).hostname.replace(/^www\./i, '').toLowerCase();
+    return host === 'instagram.com' || host.endsWith('.instagram.com');
+  } catch {
+    return false;
+  }
+}
+
+function hasPreviewThumbnail(preview) {
+  return Boolean(preview?.jpegThumbnail?.length || preview?.highQualityThumbnail);
+}
+
+function isWeakInstagramThumbnail(preview) {
+  if (!preview || preview.highQualityThumbnail) return false;
+  const thumbBytes = preview.jpegThumbnail?.length || 0;
+  const original = String(preview.originalThumbnailUrl || '');
+  return !thumbBytes || thumbBytes < 8 * 1024 || original.startsWith('data:image/');
+}
+
+function readLinkPreviewFallback() {
+  if (fs.existsSync(LINK_PREVIEW_FALLBACK_IMAGE)) return fs.readFileSync(LINK_PREVIEW_FALLBACK_IMAGE);
+  return readImage(DEFAULT_BANNER);
+}
+
+function summarizePreviewForLog(preview) {
+  if (!preview) return null;
+  return {
+    canonicalUrl: preview['canonical-url'],
+    matchedText: preview['matched-text'],
+    title: preview.title,
+    description: preview.description,
+    originalThumbnailUrl: preview.originalThumbnailUrl
+      ? {
+          kind: String(preview.originalThumbnailUrl).startsWith('data:image/') ? 'data-uri' : 'url',
+          length: String(preview.originalThumbnailUrl).length,
+          preview: String(preview.originalThumbnailUrl).slice(0, 120),
+        }
+      : preview.originalThumbnailUrl,
+    jpegThumbnail: preview.jpegThumbnail
+      ? { type: 'Buffer', bytes: preview.jpegThumbnail.length }
+      : preview.jpegThumbnail,
+    highQualityThumbnail: preview.highQualityThumbnail
+      ? {
+          present: true,
+          width: preview.highQualityThumbnail.width,
+          height: preview.highQualityThumbnail.height,
+          mimetype: preview.highQualityThumbnail.mimetype,
+          directPath: Boolean(preview.highQualityThumbnail.directPath),
+          mediaKey: Boolean(preview.highQualityThumbnail.mediaKey),
+          fileSha256: Boolean(preview.highQualityThumbnail.fileSha256),
+          fileEncSha256: Boolean(preview.highQualityThumbnail.fileEncSha256),
+        }
+      : preview.highQualityThumbnail,
+    weakInstagramThumbnail: isWeakInstagramThumbnail(preview),
+  };
+}
+
+function logInstagramPreview(preview, stage = 'raw') {
+  // Log temporal de Lab2: no imprime el binario completo para no llenar la consola,
+  // pero sí muestra todos los campos útiles y si las miniaturas vinieron vacías.
+  console.log(`[rich-ui][instagram-preview:${stage}]`, util.inspect(summarizePreviewForLog(preview), {
+    depth: 5,
+    colors: false,
+    compact: false,
+    maxArrayLength: 20,
+  }));
+}
+
+function applyInstagramPreviewFallback(preview, url) {
+  if (!isInstagramUrl(url)) return preview;
+  // Instagram suele devolver solo un favicon/data-uri pequeño. Técnicamente
+  // hay thumbnail, pero WhatsApp puede renderizarlo como preview pobre o sin
+  // imagen grande. En Lab2 usamos respaldo visual propio cuando la miniatura
+  // real viene vacía o demasiado débil.
+  if (hasPreviewThumbnail(preview) && !isWeakInstagramThumbnail(preview)) return preview;
+  const fallback = readLinkPreviewFallback();
+  if (!fallback) return preview;
+  return {
+    ...(preview || {}),
+    'matched-text': preview?.['matched-text'] || normalizeUrl(url),
+    'canonical-url': preview?.['canonical-url'] || normalizeUrl(url),
+    title: preview?.title || 'Ginko-MD ✦ Instagram',
+    description: preview?.description || 'Instagram oficial del proyecto.',
+    originalThumbnailUrl: preview?.originalThumbnailUrl,
+    jpegThumbnail: fallback,
+    previewType: 0,
+  };
+}
+
 export async function generateStandardLinkPreview({ sock, url, text, highQuality = true, timeout = 5000 } = {}) {
   const normalizedUrl = normalizeUrl(url);
   if (!normalizedUrl) return null;
+  const instagram = isInstagramUrl(normalizedUrl);
+  const browserHeaders = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'accept-language': 'es-MX,es;q=0.9,en;q=0.8',
+    'cache-control': 'no-cache',
+    'pragma': 'no-cache',
+  };
   try {
-    return await getUrlInfo(normalizedUrl, {
+    const preview = await getUrlInfo(normalizedUrl, {
       thumbnailWidth: 192,
       fetchOpts: {
         timeout,
-        headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-        },
+        headers: browserHeaders,
       },
       uploadImage: highQuality && typeof sock?.waUploadToServer === 'function'
         ? sock.waUploadToServer
         : undefined,
     });
+    if (instagram) logInstagramPreview(preview, 'raw');
+    const finalPreview = applyInstagramPreviewFallback(preview, normalizedUrl);
+    if (instagram && finalPreview !== preview) logInstagramPreview(finalPreview, 'fallback-applied');
+    return finalPreview;
   } catch (error) {
     console.warn('[rich-ui] link preview falló:', error?.message || error);
-    return null;
+    const fallbackPreview = applyInstagramPreviewFallback(null, normalizedUrl);
+    if (instagram) logInstagramPreview(fallbackPreview, 'fallback-after-error');
+    return fallbackPreview;
   }
 }
 
@@ -271,6 +375,14 @@ export async function sendRichTableProbe({ sock, jid, quoted } = {}) {
     text: '*Ginko-MD · Rich UI*\n\nPrueba | Estado\nBotón URL | Lab2\nBotón copiar | Lab2\nPreview | Experimental',
   }, { quoted });
 }
+
+export const __richUiTest = {
+  isInstagramUrl,
+  hasPreviewThumbnail,
+  isWeakInstagramThumbnail,
+  summarizePreviewForLog,
+  applyInstagramPreviewFallback,
+};
 
 export default {
   richUiEnabled,
