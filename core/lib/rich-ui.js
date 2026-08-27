@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { generateWAMessageFromContent, getUrlInfo, prepareWAMessageMedia } from 'baileys';
-import { getLinkPreview } from 'link-preview-js';
 
 const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
@@ -99,8 +98,6 @@ function summarizePreviewForLog(preview) {
           preview: String(preview.originalThumbnailUrl).slice(0, 120),
         }
       : preview.originalThumbnailUrl,
-    favicons: preview.favicons,
-    favicon: preview.favicon,
     jpegThumbnail: preview.jpegThumbnail
       ? { type: 'Buffer', bytes: preview.jpegThumbnail.length }
       : preview.jpegThumbnail,
@@ -116,82 +113,7 @@ function summarizePreviewForLog(preview) {
           fileEncSha256: Boolean(preview.highQualityThumbnail.fileEncSha256),
         }
       : preview.highQualityThumbnail,
-    faviconMMSMetadata: preview.faviconMMSMetadata
-      ? {
-          present: true,
-          thumbnailWidth: preview.faviconMMSMetadata.thumbnailWidth,
-          thumbnailHeight: preview.faviconMMSMetadata.thumbnailHeight,
-          thumbnailDirectPath: Boolean(preview.faviconMMSMetadata.thumbnailDirectPath),
-          mediaKey: Boolean(preview.faviconMMSMetadata.mediaKey),
-          thumbnailSha256: Boolean(preview.faviconMMSMetadata.thumbnailSha256),
-          thumbnailEncSha256: Boolean(preview.faviconMMSMetadata.thumbnailEncSha256),
-        }
-      : preview.faviconMMSMetadata,
     weakInstagramThumbnail: isWeakInstagramThumbnail(preview),
-  };
-}
-
-async function fetchLinkPreviewFavicons(url, { fetchOpts = {} } = {}) {
-  try {
-    const info = await getLinkPreview(url, {
-      ...fetchOpts,
-      followRedirects: 'follow',
-      headers: fetchOpts?.headers,
-    });
-    return Array.isArray(info?.favicons)
-      ? info.favicons.filter((favicon) => typeof favicon === 'string' && favicon.trim())
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function imageMessageToMmsThumbnailMetadata(imageMessage) {
-  if (!imageMessage?.directPath) return null;
-  return {
-    thumbnailDirectPath: imageMessage.directPath,
-    thumbnailSha256: imageMessage.fileSha256,
-    thumbnailEncSha256: imageMessage.fileEncSha256,
-    mediaKey: imageMessage.mediaKey,
-    mediaKeyTimestamp: imageMessage.mediaKeyTimestamp,
-    thumbnailHeight: imageMessage.height,
-    thumbnailWidth: imageMessage.width,
-    mediaKeyDomain: 1,
-  };
-}
-
-async function prepareFaviconMMSMetadata(sock, faviconUrl, fetchOpts = {}) {
-  if (typeof sock?.waUploadToServer !== 'function') return null;
-  if (!faviconUrl) return null;
-  try {
-    const { imageMessage } = await prepareWAMessageMedia(
-      { image: { url: faviconUrl } },
-      {
-        upload: sock.waUploadToServer,
-        mediaTypeOverride: 'thumbnail-link',
-        options: fetchOpts,
-      },
-    );
-    return imageMessageToMmsThumbnailMetadata(imageMessage);
-  } catch {
-    return null;
-  }
-}
-
-async function enrichPreviewWithFavicons(preview, { sock, url, fetchOpts } = {}) {
-  if (!preview) return preview;
-  const favicons = await fetchLinkPreviewFavicons(url, { fetchOpts });
-  if (!favicons.length) return preview;
-  const faviconMMSMetadata = await prepareFaviconMMSMetadata(sock, favicons[0], fetchOpts);
-  return {
-    ...preview,
-    // link-preview-js sí expone favicons; WaSocket/Baileys no los reexpone.
-    // Los dejamos en el objeto y, si tenemos upload, agregamos el campo proto
-    // que existe en ExtendedTextMessage para que el relay directo pueda probarlo.
-    favicons,
-    favicon: favicons[0],
-    faviconUrl: favicons[0],
-    ...(faviconMMSMetadata ? { faviconMMSMetadata } : {}),
   };
 }
 
@@ -246,45 +168,6 @@ async function applyInstagramPreviewFallbackIfNeeded(preview, url, sock) {
   return applyInstagramPreviewFallback(preview, url, { highQualityThumbnail });
 }
 
-function buildExtendedTextMessageContent(text, urlInfo) {
-  const extContent = { text };
-  if (!urlInfo) return extContent;
-  extContent.matchedText = urlInfo['matched-text'];
-  extContent.jpegThumbnail = urlInfo.jpegThumbnail;
-  extContent.description = urlInfo.description;
-  extContent.title = urlInfo.title;
-  extContent.previewType = 0;
-  const img = urlInfo.highQualityThumbnail;
-  if (img) {
-    extContent.thumbnailDirectPath = img.directPath;
-    extContent.mediaKey = img.mediaKey;
-    extContent.mediaKeyTimestamp = img.mediaKeyTimestamp;
-    extContent.thumbnailWidth = img.width;
-    extContent.thumbnailHeight = img.height;
-    extContent.thumbnailSha256 = img.fileSha256;
-    extContent.thumbnailEncSha256 = img.fileEncSha256;
-  }
-  if (urlInfo.faviconMMSMetadata) {
-    extContent.faviconMMSMetadata = urlInfo.faviconMMSMetadata;
-  }
-  return extContent;
-}
-
-async function sendExtendedTextWithPreview({ sock, jid, quoted, text, preview } = {}) {
-  if (!sock?.relayMessage) return null;
-  const content = {
-    extendedTextMessage: buildExtendedTextMessageContent(text, preview),
-  };
-  const generated = generateWAMessageFromContent(jid, content, {
-    userJid: sock.user?.id,
-    quoted,
-    timestamp: new Date(),
-  });
-  if (!generated?.key?.id || !generated.message) return null;
-  await sock.relayMessage(jid, generated.message, { messageId: generated.key.id });
-  return { key: generated.key, linkPreviewRelay: true };
-}
-
 export async function generateStandardLinkPreview({ sock, url, text, highQuality = true, timeout = 5000 } = {}) {
   const normalizedUrl = normalizeUrl(url);
   if (!normalizedUrl) return null;
@@ -297,7 +180,7 @@ export async function generateStandardLinkPreview({ sock, url, text, highQuality
     'pragma': 'no-cache',
   };
   try {
-    let preview = await getUrlInfo(normalizedUrl, {
+    const preview = await getUrlInfo(normalizedUrl, {
       thumbnailWidth: 192,
       fetchOpts: {
         timeout,
@@ -307,17 +190,12 @@ export async function generateStandardLinkPreview({ sock, url, text, highQuality
         ? sock.waUploadToServer
         : undefined,
     });
-    if (instagram) {
-      preview = await enrichPreviewWithFavicons(preview, {
-        sock,
-        url: normalizedUrl,
-        fetchOpts: { timeout, headers: browserHeaders },
-      });
-    }
-    return applyInstagramPreviewFallbackIfNeeded(preview, normalizedUrl, sock);
+    const finalPreview = await applyInstagramPreviewFallbackIfNeeded(preview, normalizedUrl, sock);
+    return finalPreview;
   } catch (error) {
     console.warn('[rich-ui] link preview falló:', error?.message || error);
-    return applyInstagramPreviewFallbackIfNeeded(null, normalizedUrl, sock);
+    const fallbackPreview = await applyInstagramPreviewFallbackIfNeeded(null, normalizedUrl, sock);
+    return fallbackPreview;
   }
 }
 
@@ -342,14 +220,6 @@ export async function sendStandardLinkPreview({
 
   const preview = await generateStandardLinkPreview({ sock, url: normalizedUrl, text: body, highQuality });
   const payload = preview ? { text: body, linkPreview: preview } : { text: body };
-  if (preview?.faviconMMSMetadata) {
-    try {
-      const relayed = await sendExtendedTextWithPreview({ sock, jid, quoted, text: body, preview });
-      if (relayed) return relayed;
-    } catch (error) {
-      console.warn('[rich-ui] relay con favicon falló, usando sendMessage:', error?.message || error);
-    }
-  }
   return sock.sendMessage(jid, payload, { quoted });
 }
 
@@ -530,12 +400,7 @@ export const __richUiTest = {
   hasPreviewThumbnail,
   isWeakInstagramThumbnail,
   summarizePreviewForLog,
-  fetchLinkPreviewFavicons,
-  imageMessageToMmsThumbnailMetadata,
-  prepareFaviconMMSMetadata,
-  enrichPreviewWithFavicons,
   prepareLinkPreviewFallbackImage,
-  buildExtendedTextMessageContent,
   applyInstagramPreviewFallback,
   applyInstagramPreviewFallbackIfNeeded,
 };
