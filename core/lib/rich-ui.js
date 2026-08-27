@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { generateWAMessageFromContent, getUrlInfo, prepareWAMessageMedia } from 'baileys';
+import { getLinkPreview } from 'link-preview-js';
 
 const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
@@ -113,8 +114,93 @@ function summarizePreviewForLog(preview) {
           fileEncSha256: Boolean(preview.highQualityThumbnail.fileEncSha256),
         }
       : preview.highQualityThumbnail,
+    linkPreviewMetadata: preview.linkPreviewMetadata,
+    favicon: preview.favicon,
     weakInstagramThumbnail: isWeakInstagramThumbnail(preview),
   };
+}
+
+async function fetchFirstFavicon(url, { fetchOpts = {} } = {}) {
+  try {
+    const info = await getLinkPreview(url, {
+      ...fetchOpts,
+      followRedirects: 'follow',
+      headers: fetchOpts?.headers,
+    });
+    const favicons = Array.isArray(info?.favicons)
+      ? info.favicons.filter((favicon) => typeof favicon === 'string' && favicon.trim())
+      : [];
+    return favicons[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function prepareFaviconMMSMetadata(sock, favicon, fetchOpts = {}) {
+  if (!favicon || typeof sock?.waUploadToServer !== 'function') return null;
+  try {
+    const { imageMessage } = await prepareWAMessageMedia(
+      { image: { url: favicon }, mimetype: 'image/png' },
+      {
+        upload: sock.waUploadToServer,
+        options: fetchOpts,
+      },
+    );
+    if (!imageMessage?.directPath) return null;
+    return {
+      thumbnailDirectPath: imageMessage.directPath,
+      mediaKey: imageMessage.mediaKey,
+      mediaKeyTimestamp: imageMessage.mediaKeyTimestamp,
+      thumbnailWidth: 32,
+      thumbnailHeight: 32,
+      thumbnailSha256: imageMessage.fileSha256,
+      thumbnailEncSha256: imageMessage.fileEncSha256,
+    };
+  } catch (error) {
+    console.warn('[rich-ui] no se pudo preparar favicon de link preview:', error?.message || error);
+    return null;
+  }
+}
+
+function buildExtendedTextMessageContent(text, urlInfo, faviconMMSMetadata) {
+  const extContent = { text };
+  if (urlInfo) {
+    extContent.matchedText = urlInfo['matched-text'];
+    extContent.jpegThumbnail = urlInfo.jpegThumbnail;
+    extContent.description = urlInfo.description;
+    extContent.title = urlInfo.title;
+    extContent.previewType = urlInfo.previewType ?? 0;
+    extContent.linkPreviewMetadata = urlInfo.linkPreviewMetadata ?? {};
+    const img = urlInfo.highQualityThumbnail;
+    if (img) {
+      extContent.thumbnailDirectPath = img.directPath;
+      extContent.mediaKey = img.mediaKey;
+      extContent.mediaKeyTimestamp = img.mediaKeyTimestamp;
+      extContent.thumbnailWidth = img.width;
+      extContent.thumbnailHeight = img.height;
+      extContent.thumbnailSha256 = img.fileSha256;
+      extContent.thumbnailEncSha256 = img.fileEncSha256;
+    }
+  }
+  if (faviconMMSMetadata) {
+    extContent.faviconMMSMetadata = faviconMMSMetadata;
+  }
+  return extContent;
+}
+
+async function sendTextPreviewWithFavicon({ sock, jid, quoted, text, preview, faviconMMSMetadata } = {}) {
+  if (!sock?.relayMessage) return null;
+  const content = {
+    extendedTextMessage: buildExtendedTextMessageContent(text, preview, faviconMMSMetadata),
+  };
+  const generated = generateWAMessageFromContent(jid, content, {
+    userJid: sock.user?.id,
+    quoted,
+    timestamp: new Date(),
+  });
+  if (!generated?.key?.id || !generated.message) return null;
+  await sock.relayMessage(jid, generated.message, { messageId: generated.key.id });
+  return { key: generated.key, linkPreviewFavicon: true };
 }
 
 async function prepareLinkPreviewFallbackImage(sock) {
@@ -158,6 +244,10 @@ function applyInstagramPreviewFallback(preview, url, { highQualityThumbnail } = 
     jpegThumbnail: fallback,
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
     previewType: 0,
+    linkPreviewMetadata: preview?.linkPreviewMetadata || {
+      linkMediaDuration: 0,
+      socialMediaPostType: 4,
+    },
   };
 }
 
@@ -209,6 +299,7 @@ export async function sendStandardLinkPreview({
   before = '',
   after = '',
   highQuality = true,
+  favicon = null,
 } = {}) {
   const normalizedUrl = normalizeUrl(url);
   if (!normalizedUrl) throw new Error('URL inválida para link preview');
@@ -219,6 +310,16 @@ export async function sendStandardLinkPreview({
   ].filter(Boolean).join('\n\n');
 
   const preview = await generateStandardLinkPreview({ sock, url: normalizedUrl, text: body, highQuality });
+  const faviconUrl = favicon === true
+    ? await fetchFirstFavicon(normalizedUrl, { fetchOpts: { timeout: 5000 } })
+    : favicon;
+  if (faviconUrl) {
+    const faviconMMSMetadata = await prepareFaviconMMSMetadata(sock, faviconUrl, { timeout: 5000 });
+    if (faviconMMSMetadata) {
+      const sent = await sendTextPreviewWithFavicon({ sock, jid, quoted, text: body, preview, faviconMMSMetadata });
+      if (sent) return sent;
+    }
+  }
   const payload = preview ? { text: body, linkPreview: preview } : { text: body };
   return sock.sendMessage(jid, payload, { quoted });
 }
@@ -234,6 +335,7 @@ export async function sendInstagramPreview({ sock, jid, quoted, instagramUrl } =
     description: 'Instagram oficial del proyecto.',
     before: `🌸 *Ginko-MD ✦ Instagram*\n\nInstagram oficial del proyecto.`,
     after: 'Vista previa estándar de WhatsApp · Lab2',
+    favicon: true,
   });
 }
 
@@ -400,6 +502,9 @@ export const __richUiTest = {
   hasPreviewThumbnail,
   isWeakInstagramThumbnail,
   summarizePreviewForLog,
+  fetchFirstFavicon,
+  prepareFaviconMMSMetadata,
+  buildExtendedTextMessageContent,
   prepareLinkPreviewFallbackImage,
   applyInstagramPreviewFallback,
   applyInstagramPreviewFallbackIfNeeded,

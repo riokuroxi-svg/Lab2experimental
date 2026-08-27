@@ -124,3 +124,39 @@ test('Instagram fallback prepara highQualityThumbnail subido como thumbnail-link
 
   assert.equal(finalPreview.highQualityThumbnail, image);
 });
+
+test('Instagram favicon usa la ruta compatible con forks: faviconMMSMetadata en extendedTextMessage', async () => {
+  const faviconMMSMetadata = await __richUiTest.prepareFaviconMMSMetadata({
+    waUploadToServer: async () => ({
+      mediaUrl: 'https://wa.example/favicon-uploaded',
+      directPath: '/v/t62.favicon',
+    }),
+  }, './assets/link-preview-fallback.jpg');
+
+  assert.ok(faviconMMSMetadata);
+  assert.equal(faviconMMSMetadata.thumbnailDirectPath, '/v/t62.favicon');
+  assert.equal(faviconMMSMetadata.thumbnailWidth, 32);
+  assert.equal(faviconMMSMetadata.thumbnailHeight, 32);
+
+  const content = __richUiTest.buildExtendedTextMessageContent('https://www.instagram.com/', {
+    'matched-text': 'https://www.instagram.com/',
+    title: 'Instagram',
+    description: 'Instagram oficial del proyecto.',
+    jpegThumbnail: Buffer.from('thumb'),
+    highQualityThumbnail: {
+      directPath: '/v/t62.preview',
+      fileSha256: Buffer.from('sha2'),
+      fileEncSha256: Buffer.from('enc2'),
+      mediaKey: Buffer.from('key2'),
+      mediaKeyTimestamp: 456,
+      height: 720,
+      width: 480,
+    },
+    linkPreviewMetadata: { linkMediaDuration: 0, socialMediaPostType: 4 },
+  }, faviconMMSMetadata);
+
+  assert.equal(content.matchedText, 'https://www.instagram.com/');
+  assert.equal(content.thumbnailDirectPath, '/v/t62.preview');
+  assert.deepEqual(content.linkPreviewMetadata, { linkMediaDuration: 0, socialMediaPostType: 4 });
+  assert.equal(content.faviconMMSMetadata, faviconMMSMetadata);
+});
