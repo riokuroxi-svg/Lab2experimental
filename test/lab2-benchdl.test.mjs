@@ -51,3 +51,22 @@ test('BenchDL rechaza el VIDEO_ID literal antes de llamar yt-dlp', () => {
   assert.equal(valid.ok, true);
   assert.equal(valid.videoId, 'dQw4w9WgXcQ');
 });
+
+
+import {
+  buildPlayFastCaption,
+  makePlayFastButtonId,
+  parsePlayFastButtonId,
+  sanitizeAudioFilename,
+} from '../core/lib/playFast.js';
+
+test('PlayFast arma IDs y caption sin tocar play normal', () => {
+  const id = makePlayFastButtonId('pf_test', 'audio');
+  assert.deepEqual(parsePlayFastButtonId(id), { token: 'pf_test', action: 'audio' });
+  assert.equal(parsePlayFastButtonId('__otro'), null);
+  assert.equal(sanitizeAudioFilename('a/b:c?.mp3'), 'abc');
+  const caption = buildPlayFastCaption({ title: 'Demo', channel: 'Canal', duration: '1:23', url: 'https://youtu.be/dQw4w9WgXcQ' });
+  assert.match(caption, /PLAYFAST/);
+  assert.match(caption, /MP3 con portada\/nombre Ginko/);
+  assert.match(caption, /no reemplaza \.play\/\.mp3/i);
+});

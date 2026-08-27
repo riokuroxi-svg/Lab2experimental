@@ -136,6 +136,8 @@ downloads: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *DOWNLOAD* 𐦯╶͜─
 > Descargar un archivo de MediaFire.
 ꕤ *$prefixplay » $prefixmp3 » $prefixplayaudio » $prefixytaudio » $prefixytmp3* + <url|query>
 > Descargar una canción de YouTube.
+ꕤ *$prefixplayfast » $prefixplayfats* + <url|query>
+> Lab2: play rápido con botones, sin reemplazar .play.
 ꕤ *$prefixpinterest » $prefixpin* + <url|query>
 > Buscar y descargar imagenes de Pinterest.
 ꕤ *$prefixplay2 » $prefixmp4 » $prefixplayvideo » $prefixytvideo » $prefixytmp4* + <url|query>

@@ -110,3 +110,22 @@ Objetivo:
 - Medir tiempos sin tocar `.play`, `.mp3`, `cmds/downloads/ytmp3.js` ni `core/lib/mp3Utils.js`.
 - Reportar versión de `yt-dlp`, metadata rápida por oEmbed, metadata por `yt-dlp`, descarga de audio y validez MP3.
 - No enviar el archivo descargado; solo medir tamaño/tiempo para decidir el siguiente bloque.
+
+
+## Bloque 4 — PlayFast
+
+Estado: primer bloque implementado para prueba real.
+
+Comandos agregados:
+
+```text
+.playfast <url|búsqueda>
+.playfats <url|búsqueda>
+```
+
+Objetivo:
+
+- Probar un flujo rápido separado, sin reemplazar `.play` ni `.mp3`.
+- Mantener tarjeta con botones.
+- Descargar audio con `yt-dlp` modo fast.
+- Pasar por `processMp3ForWhatsApp(..., 'Ginko Bot', ..., 'local')` para conservar portada/metadatos de Ginko.
