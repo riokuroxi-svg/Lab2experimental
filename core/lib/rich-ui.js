@@ -84,39 +84,6 @@ function readLinkPreviewFallback() {
   return readImage(DEFAULT_BANNER);
 }
 
-function summarizePreviewForLog(preview) {
-  if (!preview) return null;
-  return {
-    canonicalUrl: preview['canonical-url'],
-    matchedText: preview['matched-text'],
-    title: preview.title,
-    description: preview.description,
-    originalThumbnailUrl: preview.originalThumbnailUrl
-      ? {
-          kind: String(preview.originalThumbnailUrl).startsWith('data:image/') ? 'data-uri' : 'url',
-          length: String(preview.originalThumbnailUrl).length,
-          preview: String(preview.originalThumbnailUrl).slice(0, 120),
-        }
-      : preview.originalThumbnailUrl,
-    jpegThumbnail: preview.jpegThumbnail
-      ? { type: 'Buffer', bytes: preview.jpegThumbnail.length }
-      : preview.jpegThumbnail,
-    highQualityThumbnail: preview.highQualityThumbnail
-      ? {
-          present: true,
-          width: preview.highQualityThumbnail.width,
-          height: preview.highQualityThumbnail.height,
-          mimetype: preview.highQualityThumbnail.mimetype,
-          directPath: Boolean(preview.highQualityThumbnail.directPath),
-          mediaKey: Boolean(preview.highQualityThumbnail.mediaKey),
-          fileSha256: Boolean(preview.highQualityThumbnail.fileSha256),
-          fileEncSha256: Boolean(preview.highQualityThumbnail.fileEncSha256),
-        }
-      : preview.highQualityThumbnail,
-    weakInstagramThumbnail: isWeakInstagramThumbnail(preview),
-  };
-}
-
 async function prepareLinkPreviewFallbackImage(sock) {
   if (typeof sock?.waUploadToServer !== 'function') return null;
   if (!fs.existsSync(LINK_PREVIEW_FALLBACK_IMAGE)) return null;
@@ -399,7 +366,6 @@ export const __richUiTest = {
   isInstagramUrl,
   hasPreviewThumbnail,
   isWeakInstagramThumbnail,
-  summarizePreviewForLog,
   prepareLinkPreviewFallbackImage,
   applyInstagramPreviewFallback,
   applyInstagramPreviewFallbackIfNeeded,
