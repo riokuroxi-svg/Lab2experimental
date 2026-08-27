@@ -5,7 +5,7 @@ import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import crypto from 'crypto'
-import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
+import { downloadAudioSourceYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
 import { adquirir } from '#lib/humanize'
 import { getSelectedResponse } from '#lib/interactive-response'
 
@@ -149,14 +149,12 @@ function actualizarYtdlpEnSegundoPlano() {
     .finally(() => { ytdlpActualizando = false })
 }
 
-async function descargarAudioYtdlp(url, modo = 'fast') {
-  // No bloquear la descarga actualizando yt-dlp cada vez. Si toca actualizar,
-  // se dispara en segundo plano y la descarga usa la versión disponible.
+async function descargarAudioFuenteYtdlp(url) {
+  // Ruta rápida para .play: descargar fuente comprimida sin conversión; luego
+  // una sola pasada de ffmpeg la convierte a MP3 128K con portada/metadatos.
   actualizarYtdlpEnSegundoPlano()
-
-  const buf = await downloadAudioYtdlp(url, modo, YTDLP)
-  if (!buf || !isMp3Valid(buf)) throw new Error('Archivo descargado corrupto')
-  return buf
+  const src = await downloadAudioSourceYtdlp(url, YTDLP)
+  return { buffer: src.buffer, origen: 'raw-local', ext: src.ext }
 }
 
 function resumenErrorDescarga(e) {
@@ -171,7 +169,7 @@ async function descargarAudioSmart(url) {
   let localError = null
   if (ytdlpDisponible) {
     try {
-      return { buffer: await descargarAudioYtdlp(url, 'fast'), origen: 'local' }
+      return await descargarAudioFuenteYtdlp(url)
     } catch (e) {
       localError = e
       console.log('[play] yt-dlp falló, probando API:', resumenErrorDescarga(e))
@@ -269,20 +267,30 @@ function guardarAudioDiskCache(job = {}, result = {}) {
 }
 
 async function prepararAudioProcesado(job) {
+  const t0 = Date.now()
+  const title = sanitizeFilename(job.title || 'Audio')
   const cached = leerAudioDiskCache(job)
-  if (cached) return cached
+  if (cached) {
+    logPlayTiming('audio-cache-disk', t0, { title, mb: (cached.buffer.length / MB).toFixed(2) })
+    return cached
+  }
   const audioDescargado = await descargarAudioSmart(job.url)
   const buffer = audioDescargado.buffer
+  logPlayTiming('audio-download', t0, { title, origen: audioDescargado.origen, mb: (buffer.length / MB).toFixed(2) })
   if (buffer.length > MAX_MB_AUDIO) throw new Error('Archivo muy grande (>50MB)')
+  const processStart = Date.now()
   const procesado = await processMp3ForWhatsApp(
     buffer,
-    sanitizeFilename(job.title || 'Audio'),
+    title,
     'Ginko Bot',
     128,
-    audioDescargado?.origen || (ytdlpDisponible ? 'local' : 'api')
+    audioDescargado?.origen === 'local' ? 'local' : 'api',
+    parseDurationSeconds(job.duration)
   )
+  logPlayTiming('audio-process', processStart, { title, seconds: procesado.seconds || 0, mb: ((procesado.buffer || buffer).length / MB).toFixed(2) })
   const result = { buffer: procesado.buffer || buffer, seconds: procesado.seconds || 0 }
   guardarAudioDiskCache(job, result)
+  logPlayTiming('audio-ready', t0, { title, mb: (result.buffer.length / MB).toFixed(2) })
   return result
 }
 
