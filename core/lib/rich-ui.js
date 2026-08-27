@@ -7,7 +7,6 @@ import { getLinkPreview } from 'link-preview-js';
 const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
 const LINK_PREVIEW_FALLBACK_IMAGE = path.resolve(process.cwd(), 'assets', 'link-preview-fallback.jpg');
-const ONLYFANS_FAVICON_SOURCE_URL = 'https://onlyfans.com/';
 
 export function richUiEnabled() {
   return String(process.env.GINKO_RICH_UI || 'on').toLowerCase() !== 'off';
@@ -327,15 +326,6 @@ export async function sendStandardLinkPreview({
 
 export async function sendInstagramPreview({ sock, jid, quoted, instagramUrl } = {}) {
   const url = normalizeUrl(instagramUrl || global.links?.instagram || 'https://instagram.com/');
-  const onlyFansFavicon = await fetchFirstFavicon(ONLYFANS_FAVICON_SOURCE_URL, {
-    fetchOpts: {
-      timeout: 5000,
-      headers: {
-        'user-agent': 'Mozilla/5.0 Chrome/124 Safari/537.36',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      },
-    },
-  });
   return sendStandardLinkPreview({
     sock,
     jid,
@@ -345,7 +335,7 @@ export async function sendInstagramPreview({ sock, jid, quoted, instagramUrl } =
     description: 'Instagram oficial del proyecto.',
     before: `🌸 *Ginko-MD ✦ Instagram*\n\nInstagram oficial del proyecto.`,
     after: 'Vista previa estándar de WhatsApp · Lab2',
-    favicon: onlyFansFavicon,
+    favicon: true,
   });
 }
 
@@ -512,7 +502,6 @@ export const __richUiTest = {
   hasPreviewThumbnail,
   isWeakInstagramThumbnail,
   summarizePreviewForLog,
-  ONLYFANS_FAVICON_SOURCE_URL,
   fetchFirstFavicon,
   prepareFaviconMMSMetadata,
   buildExtendedTextMessageContent,
