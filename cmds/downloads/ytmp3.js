@@ -25,6 +25,9 @@ const ALIAS_AUDIO_DIRECTO = ['mp3', 'ytmp3', 'ytaudio', 'playaudio']
 
 // Cache de ytdlp disponible (chequear solo una vez al iniciar)
 let ytdlpDisponible = null
+let ytdlpUltimaActualizacion = 0
+let ytdlpActualizando = false
+const YTDLP_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 function getPendingMap(sock) {
   if (!sock._ginkoPlayPending) sock._ginkoPlayPending = new Map()
@@ -130,11 +133,20 @@ async function getVideoInfo(input, video_id) {
 // ════════════════════════════════════════════════════════════
 //  DESCARGA LOCAL CON YT-DLP ⚡ INSTANTÁNEO (archivos temporales, sin corrupción)
 // ════════════════════════════════════════════════════════════
+function actualizarYtdlpEnSegundoPlano() {
+  if (ytdlpActualizando) return
+  if (Date.now() - ytdlpUltimaActualizacion < YTDLP_UPDATE_INTERVAL_MS) return
+  ytdlpActualizando = true
+  ytdlpUltimaActualizacion = Date.now()
+  exec(YTDLP, ['-U', '--update-to', 'nightly'], { timeout: 30000 })
+    .catch(() => {})
+    .finally(() => { ytdlpActualizando = false })
+}
+
 async function descargarAudioYtdlp(url, modo = 'fast') {
-  // Actualizar yt-dlp antes de descargar
-  try {
-    await exec(YTDLP, ['-U', '--update-to', 'nightly'], { timeout: 30000 }).catch(() => {})
-  } catch {}
+  // No bloquear la descarga actualizando yt-dlp cada vez. Si toca actualizar,
+  // se dispara en segundo plano y la descarga usa la versión disponible.
+  actualizarYtdlpEnSegundoPlano()
 
   let buf
   try {

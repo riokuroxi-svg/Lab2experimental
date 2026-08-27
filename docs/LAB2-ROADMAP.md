@@ -111,22 +111,14 @@ Objetivo:
 - Reportar versión de `yt-dlp`, metadata rápida por oEmbed, metadata por `yt-dlp`, descarga de audio y validez MP3.
 - No enviar el archivo descargado; solo medir tamaño/tiempo para decidir el siguiente bloque.
 
+## Bloque 4 — Optimización directa de `.play`
 
-## Bloque 4 — PlayFast
-
-Estado: primer bloque implementado para prueba real.
-
-Comandos agregados:
-
-```text
-.playfast <url|búsqueda>
-.playfats <url|búsqueda>
-```
+Estado: primer ajuste implementado para prueba real.
 
 Objetivo:
 
-- Probar un flujo rápido separado, sin reemplazar `.play` ni `.mp3`.
-- Mantener tarjeta con botones.
-- Descargar audio con `yt-dlp` modo fast.
-- Pasar por `processMp3ForWhatsApp(..., 'Ginko Bot', ..., 'local')` para conservar portada/metadatos de Ginko.
-- Evitar `yt-search`, que empezó a fallar con `_title2.trim is not a function`; Lab2 usa `core/lib/youtubeSearch.js` con oEmbed/parseo seguro de YouTube.
+- Retirar `.playfast`/`.playfats` para no mantener comandos experimentales que confundan.
+- Trabajar directamente en `.play` y `.mp3` cuando el usuario ya aprobó ese enfoque.
+- Mantener botones, portada y metadatos `Ginko Bot`.
+- Evitar `yt-search`, que empezó a fallar con `_title2.trim is not a function`; Lab2 usa `core/lib/youtubeSearch.js`.
+- Evitar que `.play` bloquee la descarga actualizando `yt-dlp` antes de cada audio; la actualización ahora se dispara en segundo plano como tarea no bloqueante.
