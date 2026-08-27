@@ -8,6 +8,9 @@ import db from '#db';
 import { fastFetch } from '#lib/fastFetch';
 import { fileURLToPath } from 'url';
 import GraphemeSplitter from 'grapheme-splitter';
+import { getSelectedResponse } from '#lib/interactive-response';
+
+export { getSelectedResponse } from '#lib/interactive-response';
 
 const splitter = new GraphemeSplitter();
 const __filename = fileURLToPath(import.meta.url);
@@ -235,7 +238,8 @@ export async function smsg(sock, msg, store) {
   if (msg.message) {
     msg.type = getContentType(msg.message) || Object.keys(msg.message)[0];
     msg.msg = /viewOnceMessage|viewOnceMessageV2Extension|editedMessage|ephemeralMessage/i.test(msg.type) ? msg.message[msg.type].message[getContentType(msg.message[msg.type].message)] : extractMessageContent(msg.message[msg.type]) || msg.message[msg.type];
-    msg.body = msg.message?.conversation || msg.msg?.text || msg.msg?.conversation || msg.msg?.caption || msg.msg?.selectedButtonId || msg.msg?.singleSelectReply?.selectedRowId || msg.msg?.selectedId || msg.msg?.contentText || msg.msg?.selectedDisplayText || msg.msg?.title || msg.msg?.name || '';
+    const selectedResponse = getSelectedResponse(msg);
+    msg.body = msg.message?.conversation || msg.msg?.text || msg.msg?.conversation || msg.msg?.caption || msg.msg?.selectedButtonId || msg.msg?.singleSelectReply?.selectedRowId || msg.msg?.selectedId || msg.msg?.contentText || msg.msg?.selectedDisplayText || msg.msg?.title || msg.msg?.name || selectedResponse?.id || '';
     const rawMentioned = msg.msg?.contextInfo?.mentionedJid ?? [];
     let metaParticipants = null;
     if (msg.isGroup && rawMentioned.some(j => j?.endsWith('@lid'))) {
@@ -262,7 +266,7 @@ export async function smsg(sock, msg, store) {
       return norm;
     };
     msg.mentionedJid = rawMentioned.map(resolveMentionJid).filter(Boolean);
-    msg.text = msg.msg?.text || msg.msg?.caption || msg.message?.conversation || msg.msg?.contentText || msg.msg?.selectedDisplayText || msg.msg?.title || '';
+    msg.text = msg.msg?.text || msg.msg?.caption || msg.message?.conversation || msg.msg?.contentText || msg.msg?.selectedDisplayText || msg.msg?.title || selectedResponse?.id || '';
     let activePrefixes = [];
     if (botSetting.prefix === 1) activePrefixes = [];
     else if (Array.isArray(botSetting.prefix)) activePrefixes = botSetting.prefix;

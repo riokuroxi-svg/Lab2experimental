@@ -13,6 +13,23 @@ export const bodyMenu = `> 𖧧 ¡Hola *@$sender*! Soy *$namebot*, aquí tienes 
 ‧꒷︶꒷꒥꒷‧₊˚꒷︶꒷꒥꒷︶꒷˚₊‧꒷꒥꒷︶꒷‧`
 
 export const menuObject = {
+main: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *PRINCIPAL* 𐦯╶͜─ׄ͜─ׄ֟፝͜─ׄ͜─ׄ͜
+> ✐ Comandos generales para consultar y administrar el bot.
+ꕤ *$prefixmenu » $prefixhelp » $prefixayuda* + <categoría>
+> Ver el menú de comandos.
+ꕤ *$prefixmenumanual*
+> Ver el menú completo en texto e imagen.
+ꕤ *$prefixinfobot » $prefixbotinfo*
+> Ver información del bot.
+ꕤ *$prefixping » $prefixp*
+> Medir el tiempo de respuesta.
+ꕤ *$prefixstatus » $prefixestado*
+> Ver el estado del bot.
+ꕤ *$prefixinvite » $prefixinvitar*
+> Obtener el enlace para invitar el bot.
+ꕤ *$prefixreport » $prefixreporte » $prefixsug » $prefixsuggest* + <texto>
+> Enviar un reporte o sugerencia.
+╰ׅ͜─֟͜─͜─ٞ͜─͜─๊͜─͜─๋͜─⃔═̶፝֟͜═̶⃔─๋͜─͜─͜─๊͜─ٞ͜─͜─֟͜┈ࠢ͜╯ׅ`,
 economia: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *ECONOMY* 𐦯╶͜─ׄ͜─ׄ֟፝͜─ׄ͜─ׄ͜
 > ✐ Comandos de Economía para ganar dinero y divertirte con tus amigos.
 ꕤ *$prefixw » $prefixwork » $prefixtrabajar*

@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:native-menu": "node --test test/native-menu.test.mjs"
   },
   "imports": {
     "#serialize": "./core/serialize.js",

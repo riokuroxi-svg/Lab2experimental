@@ -6,6 +6,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
 import { adquirir } from '#lib/humanize'
+import { getSelectedResponse } from '#lib/interactive-response'
 
 const exec = promisify(execFile)
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp'
@@ -225,13 +226,9 @@ async function procesarRespuesta(sock, m) {
     }
     return
   }
-  let selectedId='', ctxStanzaId=''
-  const lrm = m.message?.listResponseMessage, brm = m.message?.buttonsResponseMessage, trm=m.message?.templateButtonReplyMessage, irm=m.message?.interactiveResponseMessage, nfrm=irm?.nativeFlowResponseMessage
-  if (lrm?.singleSelectReply?.selectedRowId) { selectedId=String(lrm.singleSelectReply.selectedRowId); ctxStanzaId=lrm.contextInfo?.stanzaId||'' }
-  else if (brm?.selectedButtonId) { selectedId=String(brm.selectedButtonId); ctxStanzaId=brm.contextInfo?.stanzaId||'' }
-  else if (trm?.selectedId) { selectedId=String(trm.selectedId); ctxStanzaId=trm.contextInfo?.stanzaId||'' }
-  else if (nfrm?.paramsJson) { try { const p=JSON.parse(typeof nfrm.paramsJson==='string'?nfrm.paramsJson:'{}'); selectedId=String(p.id||'') } catch {}; ctxStanzaId=irm?.contextInfo?.stanzaId||nfrm.contextInfo?.stanzaId||'' }
-  else if (irm?.body?.text) selectedId=String(irm.body.text)
+  const selectedResponse = getSelectedResponse(m)
+  const selectedId = String(selectedResponse?.id || '')
+  const ctxStanzaId = String(selectedResponse?.stanzaId || '')
   if (selectedId) {
     // 1) Match por token único de tarjeta (ID dinámico bien usado)
     const token = selectedId.match(/^(gk_[a-z0-9]+)_(?:pa|pv|pad|pvd)$/i)?.[1]

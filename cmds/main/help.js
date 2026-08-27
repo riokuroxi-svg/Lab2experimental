@@ -3,6 +3,11 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import moment from 'moment-timezone';
 import { bodyMenu, menuObject } from '#system/commands';
+import {
+  handleNativeMenuResponse,
+  isNativeMenuResponse,
+  sendNativeCategoryMenu,
+} from '#lib/native-menu';
 import db from '#db';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,11 +45,46 @@ function formatearMs(ms) {
   return [dias && `${dias}d`, `${horas % 24}h`, `${minutos % 60}m`, `${segundos % 60}s`].filter(Boolean).join(' ');
 }
 
-export default {
-  command: ['allmenu', 'help', 'menu', 'ayuda'],
+const menuCommand = {
+  command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual'],
   category: 'main',
   description: 'Ver el menú de comandos.',
-  run: async ({ msg, sock, args, usedPrefix }) => {
+  before: async ({ msg, sock }) => {
+    if (!msg?.message || !isNativeMenuResponse(msg)) return;
+
+    const botId = sock?.user?.id ? `${sock.user.id.split(':')[0]}@s.whatsapp.net` : '';
+    const settings = botId ? (db.getSettings(botId) || {}) : {};
+    const configuredPrefix = Array.isArray(settings.prefix)
+      ? (settings.prefix.includes('.') ? '.' : (settings.prefix[0] || '.'))
+      : typeof settings.prefix === 'string'
+        ? (settings.prefix || '.')
+        : settings.prefix === 1
+          ? ''
+          : '.';
+
+    try {
+      await handleNativeMenuResponse({
+        msg,
+        sock,
+        prefix: configuredPrefix,
+        onCategory: (category) => menuCommand.run({
+          msg,
+          sock,
+          args: [category],
+          usedPrefix: configuredPrefix,
+          command: 'menu',
+        }),
+      });
+    } catch (error) {
+      console.error('[NATIVE MENU RESPONSE ERROR]', error);
+      try {
+        await sock.sendMessage(msg.chat, {
+          text: `No pude abrir esa categoría. Usa *${configuredPrefix}menumanual* para ver el menú en texto e imagen.`,
+        }, { quoted: msg });
+      } catch {}
+    }
+  },
+  run: async ({ msg, sock, args, usedPrefix, command }) => {
     try {
       const now = new Date();
       const nowMx = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
@@ -85,6 +125,7 @@ export default {
       const time = sock.uptime ? formatearMs(Date.now() - sock.uptime) : 'Desconocido';
 
       const alias = {
+        main: ['main', 'principal', 'general'],
         anime: ['anime', 'reacciones'],
         downloads: ['downloads', 'descargas'],
         economia: ['economia', 'economy', 'eco'],
@@ -140,6 +181,24 @@ export default {
         };
       }
 
+      // .menu sin categoría usa el selector nativo. El banner local se prepara
+      // como header multimedia; si la serialización, la subida o el relay
+      // fallan, se continúa por la ruta manual de abajo sin perder la imagen.
+      if (command === 'menu' && !cat) {
+        const nativeBody = `🌸 *${namebot}*\\nSelecciona una categoría para ver sus comandos.\\n\\n> Si tu WhatsApp no muestra el selector, usa *${usedPrefix}menumanual*.`;
+        const nativeResult = await sendNativeCategoryMenu({
+          sock,
+          jid: msg.chat,
+          body: nativeBody,
+          footer: `${namebot} · menú nativo`,
+          title: 'Categorías',
+          quoted: msg,
+          bannerBuffer: banner === LOCAL_BANNER ? getBannerBuffer() : null,
+        });
+        if (nativeResult.sent) return;
+        console.warn('[NATIVE MENU FALLBACK]', nativeResult.error?.message || nativeResult.error || 'error desconocido');
+      }
+
       if (banner && (banner === LOCAL_BANNER || fs.existsSync(banner))) {
         const isVideo = /\.(mp4|webm)(\?|$)/i.test(banner);
         // Usar caché para el banner local
@@ -166,3 +225,5 @@ export default {
     }
   }
 };
+
+export default menuCommand;

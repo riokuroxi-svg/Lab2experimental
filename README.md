@@ -55,11 +55,14 @@
 | 🔄 **Auto-update integrado** | El bot actualiza yt-dlp solo cada 24 h (canal *nightly*, fixes diarios de YouTube). Con `YTDLP_PLUGIN_URL` en `.env`, el plugin también se auto-reemplaza desde el repo. **Cero mantenimiento.** |
 | 🚀 **Optimizaciones generales de velocidad** | Metadata de YouTube por oEmbed en 60ms (antes 2-3s), personajes de gacha en caché de memoria, imágenes de waifu buscadas en paralelo, banner del menú cacheado en RAM, fetch nativo de Node con keep-alive, reacciones inmediatas al recibir comandos. |
 | 🛡️ **Requisito de Node corregido** | `engines` actualizado a **Node ≥ 22.5** (el bot usa `node:sqlite`; con Node 20 crashea al arrancar). |
+| 🌸 **Selector nativo de `.menu`** | `.menu` usa `interactiveMessage.nativeFlowMessage` con `single_select`, banner local y fallback automático; `.menumanual` conserva el menú completo en texto/imagen. |
 | 🧰 **Extras** | `.env.example` extendido, carpeta `docs/` con guías. |
 
 ### ⚡ Uso rápido
 
 ```
+.menu                                  → selector nativo de categorías
+.menumanual                            → menú completo con texto/imagen
 .ytdlp https://youtu.be/xxxx          → video 720p
 .ytdlp https://youtu.be/xxxx audio    → canción m4a turbo ⚡
 .ytdlp https://youtu.be/xxxx mp3      → mp3 320k
@@ -68,7 +71,7 @@
 
 **Requisitos del host:** Node ≥ 22.5 · `pip install -U --pre "yt-dlp[default]"` · `apt install ffmpeg` (solo para el modo mp3).
 
-> 📚 Detalles completos en [`docs/YTDLP-INSTALACION.md`](docs/YTDLP-INSTALACION.md) y [`docs/GUIA-INTEGRACION.md`](docs/GUIA-INTEGRACION.md).
+> 📚 Detalles completos en [`docs/YTDLP-INSTALACION.md`](docs/YTDLP-INSTALACION.md), [`docs/GUIA-INTEGRACION.md`](docs/GUIA-INTEGRACION.md) y [`docs/NATIVE-MENU-TERMUX.md`](docs/NATIVE-MENU-TERMUX.md).
 
 <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a139a6edaec5c.gif" width="100%"/>
 

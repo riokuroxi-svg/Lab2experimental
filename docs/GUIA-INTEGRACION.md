@@ -1,6 +1,6 @@
 # 🧪 Guía de integración para Ginko-MD-Lab
 
-Cómo aprovechar los repos de ingeniería inversa/automatización dentro de **tu** bot (Baileys MD, ESM, Node ≥ 20).
+Cómo aprovechar los repos de ingeniería inversa/automatización dentro de **tu** bot (Baileys MD, ESM, Node ≥ 22.5).
 
 ---
 
