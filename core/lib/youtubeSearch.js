@@ -1,4 +1,4 @@
-import { fastFetch } from '#lib/fastFetch';
+import { fastFetch, globalFetchCache } from '#lib/fastFetch';
 
 const YOUTUBE_HEADERS = {
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -94,6 +94,9 @@ function collectVideos(node, videos = [], seen = new Set()) {
 export async function getVideoInfoById(videoId) {
   const id = getYouTubeVideoId(videoId);
   if (!id) return null;
+  const cacheKey = `yt-id:${id}`;
+  const cached = globalFetchCache.get(cacheKey);
+  if (cached) return cached;
   try {
     const res = await fastFetch(`https://www.youtube.com/oembed?url=https://youtu.be/${id}&format=json`, {
       timeout: 6000,
@@ -101,7 +104,7 @@ export async function getVideoInfoById(videoId) {
     });
     if (res.ok) {
       const json = await res.json();
-      return {
+      const info = {
         type: 'video',
         videoId: id,
         url: `https://youtu.be/${id}`,
@@ -113,9 +116,11 @@ export async function getVideoInfoById(videoId) {
         ago: '',
         views: 0,
       };
+      globalFetchCache.set(cacheKey, info, 60 * 60 * 1000);
+      return info;
     }
   } catch {}
-  return {
+  const fallback = {
     type: 'video',
     videoId: id,
     url: `https://youtu.be/${id}`,
@@ -127,6 +132,8 @@ export async function getVideoInfoById(videoId) {
     ago: '',
     views: 0,
   };
+  globalFetchCache.set(cacheKey, fallback, 10 * 60 * 1000);
+  return fallback;
 }
 
 export async function searchYouTube(query, { limit = 10 } = {}) {
@@ -137,15 +144,20 @@ export async function searchYouTube(query, { limit = 10 } = {}) {
     const info = await getVideoInfoById(directId);
     return { videos: info ? [info] : [], all: info ? [info] : [] };
   }
+  const cacheKey = `yt-search:${raw.toLowerCase()}:${limit}`;
+  const cached = globalFetchCache.get(cacheKey);
+  if (cached) return cached;
   const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
-  const res = await fastFetch(url, { timeout: 12_000, headers: YOUTUBE_HEADERS });
+  const res = await fastFetch(url, { timeout: 12_000, headers: YOUTUBE_HEADERS, cache: true, cacheKey: `yt-html:${raw.toLowerCase()}`, cacheTTL: 5 * 60 * 1000 });
   if (!res.ok) throw new Error(`YouTube search HTTP ${res.status}`);
   const html = await res.text();
   const jsonText = extractJsonObject(html);
   if (!jsonText) throw new Error('YouTube no devolvió datos de búsqueda parseables');
   const data = JSON.parse(jsonText);
   const videos = collectVideos(data).slice(0, limit);
-  return { videos, all: videos };
+  const result = { videos, all: videos };
+  globalFetchCache.set(cacheKey, result, 5 * 60 * 1000);
+  return result;
 }
 
 export default async function ytsSafe(input) {

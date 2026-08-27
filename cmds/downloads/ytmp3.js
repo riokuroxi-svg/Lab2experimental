@@ -148,19 +148,36 @@ async function descargarAudioYtdlp(url, modo = 'fast') {
   // se dispara en segundo plano y la descarga usa la versión disponible.
   actualizarYtdlpEnSegundoPlano()
 
-  let buf
-  try {
-    buf = await downloadAudioYtdlp(url, modo, YTDLP)
-  } catch (e) {
-    await dormir(1000)
-    try {
-      buf = await downloadAudioYtdlp(url, 'fast', YTDLP)
-    } catch (e2) {
-      throw new Error(e.message || e2.message || 'Error al descargar audio')
-    }
-  }
+  const buf = await downloadAudioYtdlp(url, modo, YTDLP)
   if (!buf || !isMp3Valid(buf)) throw new Error('Archivo descargado corrupto')
   return buf
+}
+
+function resumenErrorDescarga(e) {
+  const msg = String(e?.stderr || e?.message || e || '')
+  if (/not a bot|cookies/i.test(msg)) return 'YouTube pidió verificación anti-bot'
+  if (/HTTP 401/i.test(msg)) return 'API HTTP 401'
+  if (/HTTP \d+/i.test(msg)) return msg.match(/HTTP \d+/i)?.[0] || 'HTTP error'
+  return msg.split('\n').find(Boolean)?.slice(0, 120) || 'falló la descarga'
+}
+
+async function descargarAudioSmart(url) {
+  let localError = null
+  if (ytdlpDisponible) {
+    try {
+      return { buffer: await descargarAudioYtdlp(url, 'fast'), origen: 'local' }
+    } catch (e) {
+      localError = e
+      console.log('[play] yt-dlp falló, probando API:', resumenErrorDescarga(e))
+    }
+  }
+  try {
+    const api = await descargarAudioApi(url)
+    return { buffer: api.buffer, origen: 'api', name: api.name }
+  } catch (apiError) {
+    if (localError) throw new Error(`yt-dlp: ${resumenErrorDescarga(localError)} | API: ${resumenErrorDescarga(apiError)}`)
+    throw apiError
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -291,14 +308,15 @@ async function ejecutarDescarga(sock, job, modo, m) {
     liberar = await adquirir('descargas', 2) // máx 2 descargas simultáneas en todo el bot
     let buffer
     if (tipo==='audio') {
-      buffer = ytdlpDisponible ? await descargarAudioYtdlp(job.url,'fast') : (await descargarAudioApi(job.url)).buffer
+      const audioDescargado = await descargarAudioSmart(job.url)
+      buffer = audioDescargado.buffer
       if (buffer.length>MAX_MB_AUDIO) throw new Error('Archivo muy grande (>50MB)')
       if (estadoMsg?.key) try { await sock.sendMessage(chat, {delete:estadoMsg.key}) } catch {}
       let finalBuf = buffer
       let segundos = 0
       try {
         await sock.sendMessage(chat,{react:{text:'🖼️',key:m.key}})
-        const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(job.title), 'Ginko Bot', 128, ytdlpDisponible ? 'local' : 'api')
+        const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(job.title), 'Ginko Bot', 128, audioDescargado?.origen || (ytdlpDisponible ? 'local' : 'api'))
         finalBuf = procesado.buffer
         segundos = procesado.seconds || 0
       } catch (e) { console.log('[play] Error procesando MP3:', e.message) }
@@ -359,11 +377,12 @@ const cmd = {
         const estado = await sock.sendMessage(msg.chat,{text:`⏳ Descargando audio...${ytdlpDisponible?' ⚡':''}`},{quoted:msg}).catch(()=>null)
         try {
           const [desc, info] = await Promise.allSettled([
-            ytdlpDisponible ? descargarAudioYtdlp(url,'fast') : descargarAudioApi(url).then(r=>r.buffer),
+            descargarAudioSmart(url),
             getVideoInfo(input, videoId)
           ])
           if (desc.status!=='fulfilled') throw desc.reason||new Error('No se pudo descargar')
-          const buffer = desc.value
+          const audioDescargado = desc.value
+          const buffer = audioDescargado.buffer
           const title = info.status==='fulfilled'&&info.value ? info.value.title : 'Audio'
           if (buffer.length>MAX_MB_AUDIO) throw new Error('Muy grande (>50MB)')
           if (estado?.key) try { await sock.sendMessage(msg.chat,{delete:estado.key}) } catch {}
@@ -371,7 +390,7 @@ const cmd = {
           let segundos = 0
           try {
             await sock.sendMessage(msg.chat,{react:{text:'🖼️',key:msg.key}})
-            const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(title), 'Ginko Bot', 128, ytdlpDisponible ? 'local' : 'api')
+            const procesado = await processMp3ForWhatsApp(buffer, sanitizeFilename(title), 'Ginko Bot', 128, audioDescargado?.origen || (ytdlpDisponible ? 'local' : 'api'))
             finalBuf = procesado.buffer
             segundos = procesado.seconds || 0
           } catch (e) { console.log('[play] Error procesando MP3:', e.message) }
