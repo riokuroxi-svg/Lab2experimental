@@ -7,6 +7,7 @@ import {
   isYouTubeUrl,
   normalizeBenchmarkMode,
   renderBenchReport,
+  validateBenchUrl,
 } from '../core/lib/downloadBench.js';
 
 test('BenchDL normaliza modos sin tocar play/mp3', () => {
@@ -39,4 +40,14 @@ test('BenchDL formatea reporte de medición', () => {
   assert.match(report, /BenchDL/);
   assert.match(report, /yt-dlp versión/);
   assert.match(report, /No envía archivo/);
+});
+
+test('BenchDL rechaza el VIDEO_ID literal antes de llamar yt-dlp', () => {
+  const invalid = validateBenchUrl('https://youtu.be/VIDEO_ID');
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.reason, /VIDEO_ID/);
+
+  const valid = validateBenchUrl('https://youtu.be/dQw4w9WgXcQ');
+  assert.equal(valid.ok, true);
+  assert.equal(valid.videoId, 'dQw4w9WgXcQ');
 });

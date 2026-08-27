@@ -5,11 +5,10 @@ import { downloadAudioYtdlp, isMp3Valid } from '#lib/mp3Utils';
 import { adquirir } from '#lib/humanize';
 import {
   formatBytes,
-  getYouTubeVideoId,
-  isYouTubeUrl,
   measureStep,
   normalizeBenchmarkMode,
   renderBenchReport,
+  validateBenchUrl,
 } from '#lib/downloadBench';
 
 const exec = promisify(execFile);
@@ -51,11 +50,13 @@ export default {
     const url = String(args[0] || '').trim();
     const mode = normalizeBenchmarkMode(args[1] || 'fast');
 
-    if (!url || !/^https?:\/\//i.test(url) || !isYouTubeUrl(url)) {
+    const validation = validateBenchUrl(url);
+    if (!validation.ok) {
       return msg.reply(
         `🧪 *BenchDL · Lab2*\n\n` +
-        `Uso:\n*${usedPrefix}benchdl* <url de YouTube> [fast|normal|mp3]\n\n` +
-        `Ejemplo:\n*${usedPrefix}benchdl* https://youtu.be/VIDEO_ID fast\n\n` +
+        `⚠️ ${validation.reason}\n\n` +
+        `Uso:\n*${usedPrefix}benchdl* <url real de YouTube> [fast|normal|mp3]\n\n` +
+        `Ejemplo:\n*${usedPrefix}benchdl* https://youtu.be/dQw4w9WgXcQ fast\n\n` +
         `_Este comando solo mide; no modifica ni reemplaza .play/.mp3._`,
       );
     }
@@ -77,7 +78,7 @@ export default {
       steps.push(versionStep);
       if (!versionStep.ok) throw new Error(`yt-dlp no disponible: ${versionStep.error}`);
 
-      const videoId = getYouTubeVideoId(url);
+      const videoId = validation.videoId;
       const oembedStep = await measureStep('metadata oEmbed', () => getOEmbedInfo(videoId));
       steps.push(oembedStep);
       if (oembedStep.ok && oembedStep.value?.title) title = oembedStep.value.title;

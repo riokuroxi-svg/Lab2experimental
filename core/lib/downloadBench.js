@@ -30,6 +30,18 @@ export function getYouTubeVideoId(input = '') {
   return null;
 }
 
+
+export function validateBenchUrl(url = '') {
+  const raw = String(url || '').trim();
+  if (!raw) return { ok: false, reason: 'Falta la URL de YouTube.' };
+  if (!/^https?:\/\//i.test(raw)) return { ok: false, reason: 'La URL debe empezar con http:// o https://.' };
+  if (!isYouTubeUrl(raw)) return { ok: false, reason: 'Solo se aceptan enlaces de YouTube para este benchmark.' };
+  if (/VIDEO_ID/i.test(raw)) return { ok: false, reason: 'Ese es el ejemplo literal. Reemplaza VIDEO_ID por un enlace real de YouTube.' };
+  const videoId = getYouTubeVideoId(raw);
+  if (!videoId) return { ok: false, reason: 'No pude detectar un ID válido de YouTube. Debe tener 11 caracteres.' };
+  return { ok: true, videoId, url: raw };
+}
+
 export function formatMs(ms = 0) {
   const n = Number(ms) || 0;
   if (n < 1000) return `${Math.round(n)} ms`;
