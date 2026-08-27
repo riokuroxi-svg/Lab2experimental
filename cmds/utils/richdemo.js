@@ -1,8 +1,7 @@
 import {
   sendExternalAdProbe,
-  sendInstagramCard,
+  sendInstagramPreview,
   sendLinkPreviewProbe,
-  sendRichButtons,
   sendRichTableProbe,
 } from '#lib/rich-ui';
 
@@ -18,10 +17,10 @@ function getInstagramUrl() {
 function help(prefix = '.') {
   return `*Bloque 1 — Rich UI Demo*\n\n` +
     `Pruebas disponibles:\n` +
-    `• *${prefix}richdemo* botones\n` +
-    `• *${prefix}richdemo* ig\n` +
-    `• *${prefix}richdemo* preview\n` +
-    `• *${prefix}richdemo* ad\n` +
+    `• *${prefix}richdemo* ig  → URL en texto + preview estándar\n` +
+    `• *${prefix}richdemo* preview  → alias de ig\n` +
+    `• *${prefix}richdemo* botones  → demo no recomendado/legacy\n` +
+    `• *${prefix}richdemo* ad  → externalAdReply experimental\n` +
     `• *${prefix}richdemo* table\n` +
     `• *${prefix}richdemo* ai\n` +
     `• *${prefix}richdemo* all\n\n` +
@@ -42,21 +41,12 @@ export default {
 
     const runOne = async (name) => {
       if (name === 'botones') {
-        return sendRichButtons({
-          sock,
-          jid: msg.chat,
-          quoted: msg,
-          title: 'Ginko-MD ✦ Rich UI',
-          body: 'Prueba directa de imagen, botón URL, botón copiar y quick reply.\n\nSi esto se ve bonito, podemos reutilizarlo en comandos reales.',
-          footer: 'Lab2 · Bloque 1',
-          buttons: [
-            { text: '🌸 Instagram', url: instagramUrl },
-            { text: '📋 Copiar link', copy: instagramUrl },
-            { text: '✅ Responder', id: 'ginko_richdemo_ok' },
-          ],
-        });
+        await sock.sendMessage(msg.chat, {
+          text: '⚠️ Modo legacy: para links ahora usamos URL en texto + vista previa normal.\n\nEjecutando preview estándar en su lugar...',
+        }, { quoted: msg });
+        return sendInstagramPreview({ sock, jid: msg.chat, quoted: msg, instagramUrl });
       }
-      if (name === 'ig') return sendInstagramCard({ sock, jid: msg.chat, quoted: msg, instagramUrl });
+      if (name === 'ig') return sendInstagramPreview({ sock, jid: msg.chat, quoted: msg, instagramUrl });
       if (name === 'preview') return sendLinkPreviewProbe({ sock, jid: msg.chat, quoted: msg, instagramUrl });
       if (name === 'ad') return sendExternalAdProbe({ sock, jid: msg.chat, quoted: msg, instagramUrl });
       if (name === 'table') return sendRichTableProbe({ sock, jid: msg.chat, quoted: msg });
@@ -71,7 +61,6 @@ export default {
 
     try {
       if (mode === 'all') {
-        await runOne('botones');
         await runOne('ig');
         await runOne('preview');
         await runOne('ad');

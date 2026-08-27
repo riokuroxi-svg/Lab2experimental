@@ -43,10 +43,10 @@ Modos:
 
 Objetivo:
 
-- Probar imagen + botones nativos.
-- Probar botón URL a Instagram real.
-- Probar botón copiar.
-- Probar link preview con miniatura propia.
+- Probar URL en texto + vista previa estándar de WhatsApp.
+- Forzar link preview con `getUrlInfo` de Baileys/WaSocket cuando sea posible.
+- Evitar `interactiveMessage/viewOnceMessage` para links.
+- Mantener botones solo como modo legacy/no recomendado.
 - Probar externalAdReply con miniatura propia.
 - Probar tabla/rich message si el socket lo soporta.
 - Probar etiqueta `ai: true` solo en privado.
@@ -69,3 +69,23 @@ No tocar directamente sin bloque propio:
 - `main.js`
 - `index.js`
 - `Ginko-MD` estable
+
+
+## Cambio de enfoque — Links
+
+Para links/redes se prioriza:
+
+```text
+URL visible en el texto + link preview estándar de WhatsApp
+```
+
+No se priorizan botones `cta_url`/`quick_reply` para links, porque dependen de `interactiveMessage`/`viewOnceMessage` y pueden ser más frágiles si WhatsApp cambia algo.
+
+Helper reutilizable:
+
+```text
+core/lib/rich-ui.js
+- generateStandardLinkPreview()
+- sendStandardLinkPreview()
+- sendInstagramPreview()
+```

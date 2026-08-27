@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys';
+import { generateWAMessageFromContent, getUrlInfo, prepareWAMessageMedia } from 'baileys';
 
 const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
@@ -46,6 +46,72 @@ function buildBizNode() {
 function readImage(imagePath = DEFAULT_BANNER) {
   const chosen = fs.existsSync(imagePath) ? imagePath : DEFAULT_FALLBACK_IMAGE;
   return fs.existsSync(chosen) ? fs.readFileSync(chosen) : null;
+}
+
+function normalizeUrl(url = '') {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+export async function generateStandardLinkPreview({ sock, url, text, highQuality = true, timeout = 5000 } = {}) {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) return null;
+  try {
+    return await getUrlInfo(normalizedUrl, {
+      thumbnailWidth: 192,
+      fetchOpts: {
+        timeout,
+        headers: {
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+        },
+      },
+      uploadImage: highQuality && typeof sock?.waUploadToServer === 'function'
+        ? sock.waUploadToServer
+        : undefined,
+    });
+  } catch (error) {
+    console.warn('[rich-ui] link preview falló:', error?.message || error);
+    return null;
+  }
+}
+
+export async function sendStandardLinkPreview({
+  sock,
+  jid,
+  quoted,
+  url,
+  title = 'Ginko-MD',
+  description = '',
+  before = '',
+  after = '',
+  highQuality = true,
+} = {}) {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) throw new Error('URL inválida para link preview');
+  const body = [
+    before || `*${title}*${description ? `\n${description}` : ''}`,
+    normalizedUrl,
+    after,
+  ].filter(Boolean).join('\n\n');
+
+  const preview = await generateStandardLinkPreview({ sock, url: normalizedUrl, text: body, highQuality });
+  const payload = preview ? { text: body, linkPreview: preview } : { text: body };
+  return sock.sendMessage(jid, payload, { quoted });
+}
+
+export async function sendInstagramPreview({ sock, jid, quoted, instagramUrl } = {}) {
+  const url = normalizeUrl(instagramUrl || global.links?.instagram || 'https://instagram.com/');
+  return sendStandardLinkPreview({
+    sock,
+    jid,
+    quoted,
+    url,
+    title: 'Ginko-MD ✦ Instagram',
+    description: 'Instagram oficial del proyecto.',
+    before: `🌸 *Ginko-MD ✦ Instagram*\n\nInstagram oficial del proyecto.`,
+    after: 'Vista previa estándar de WhatsApp · Lab2',
+  });
 }
 
 async function prepareHeaderImage(sock, imagePath) {
@@ -138,47 +204,14 @@ export async function sendRichButtons({ sock, jid, title, body, footer, buttons 
   return { key: generated.key, rich: true };
 }
 
-export async function sendInstagramCard({ sock, jid, quoted, instagramUrl, imagePath = DEFAULT_BANNER } = {}) {
-  const url = instagramUrl || global.links?.instagram || 'https://instagram.com/';
-  const body = `🌸 *Ginko-MD*\n\nInstagram oficial del proyecto.\n\n${url}`;
-  try {
-    return await sendRichButtons({
-      sock,
-      jid,
-      quoted,
-      title: 'Ginko-MD ✦ Instagram',
-      body,
-      footer: 'Tarjeta experimental de Lab2',
-      imagePath,
-      buttons: [
-        { text: '🌸 Abrir Instagram', url },
-        { text: '📋 Copiar link', copy: url },
-      ],
-    });
-  } catch (error) {
-    const img = readImage(imagePath);
-    const fallbackPayload = img
-      ? { image: img, caption: body }
-      : { text: body };
-    const sent = await sock.sendMessage(jid, fallbackPayload, { quoted });
-    return { ...sent, rich: false, error };
-  }
+export async function sendInstagramCard({ sock, jid, quoted, instagramUrl } = {}) {
+  // Enfoque nuevo: link real en texto + preview estándar. Sin interactiveMessage,
+  // sin viewOnceMessage y sin botones para links.
+  return sendInstagramPreview({ sock, jid, quoted, instagramUrl });
 }
 
-export async function sendLinkPreviewProbe({ sock, jid, quoted, instagramUrl, imagePath = DEFAULT_BANNER } = {}) {
-  const url = instagramUrl || global.links?.instagram || 'https://instagram.com/';
-  const thumb = readImage(imagePath);
-  const payload = {
-    text: `🌿 Ginko-MD Instagram\n${url}`,
-    linkPreview: {
-      'matched-text': url,
-      title: 'Ginko-MD ✦ Instagram',
-      description: 'Tarjeta experimental con miniatura propia.',
-      previewType: 0,
-      ...(thumb ? { jpegThumbnail: thumb } : {}),
-    },
-  };
-  return sock.sendMessage(jid, payload, { quoted });
+export async function sendLinkPreviewProbe({ sock, jid, quoted, instagramUrl } = {}) {
+  return sendInstagramPreview({ sock, jid, quoted, instagramUrl });
 }
 
 export async function sendExternalAdProbe({ sock, jid, quoted, instagramUrl, imagePath = DEFAULT_BANNER } = {}) {
@@ -242,6 +275,9 @@ export async function sendRichTableProbe({ sock, jid, quoted } = {}) {
 export default {
   richUiEnabled,
   buildRichInteractiveContent,
+  generateStandardLinkPreview,
+  sendStandardLinkPreview,
+  sendInstagramPreview,
   sendRichButtons,
   sendInstagramCard,
   sendLinkPreviewProbe,
