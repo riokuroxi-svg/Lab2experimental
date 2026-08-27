@@ -94,3 +94,19 @@ Nota Lab2: cuando Instagram entregue solo favicon/data-uri o miniatura débil, `
 
 
 Conclusión favicon Lab2: `link-preview-js` expone `favicons`, y forks como `@itsliaaa/baileys`/`@itsmelody/Baileys` documentan `favicon: { url }` convertido a `extendedTextMessage.faviconMMSMetadata`. Se probó replicar esa salida en WaSocket, incluso con favicon de OnlyFans, pero WhatsApp no lo renderizó en prueba real. Se elimina el código de favicon fallido para no dejar experimento inútil; Lab2 conserva solo el preview grande con imagen, que sí fue confirmado.
+
+## Bloque 3 — BenchDL
+
+Estado: primer bloque implementado para prueba real.
+
+Comando agregado:
+
+```text
+.benchdl <url de YouTube> [fast|normal|mp3]
+```
+
+Objetivo:
+
+- Medir tiempos sin tocar `.play`, `.mp3`, `cmds/downloads/ytmp3.js` ni `core/lib/mp3Utils.js`.
+- Reportar versión de `yt-dlp`, metadata rápida por oEmbed, metadata por `yt-dlp`, descarga de audio y validez MP3.
+- No enviar el archivo descargado; solo medir tamaño/tiempo para decidir el siguiente bloque.

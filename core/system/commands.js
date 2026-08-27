@@ -150,6 +150,8 @@ downloads: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *DOWNLOAD* 𐦯╶͜─
 > Buscar música en Deezer (preview 30s).
 ꕤ *$prefixytsearch » $prefixsearch » $prefixys* + <query>
 > Buscar videos de YouTube.
+ꕤ *$prefixbenchdl* + <url> [fast|normal|mp3]
+> Lab2: medir tiempos de descarga sin enviar archivo.
 ꕤ *$prefiximagen » $prefiximg » $prefiximage* + <query>
 > Buscar y descargar imagenes de Google.
 ꕤ *$prefixaptoide » $prefixapk » $prefixapkdl* + <query>

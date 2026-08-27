@@ -8,7 +8,7 @@
     "format": "prettier --write .",
     "start": "node index.js",
     "test:native-menu": "node --test test/native-menu.test.mjs",
-    "test:lab2-fixes": "node --test test/lab2-mining-code.test.mjs"
+    "test:lab2-fixes": "node --test test/lab2-mining-code.test.mjs test/lab2-benchdl.test.mjs"
   },
   "imports": {
     "#serialize": "./core/serialize.js",
