@@ -129,3 +129,4 @@ Objetivo:
 - Mantener tarjeta con botones.
 - Descargar audio con `yt-dlp` modo fast.
 - Pasar por `processMp3ForWhatsApp(..., 'Ginko Bot', ..., 'local')` para conservar portada/metadatos de Ginko.
+- Evitar `yt-search`, que empezó a fallar con `_title2.trim is not a function`; Lab2 usa `core/lib/youtubeSearch.js` con oEmbed/parseo seguro de YouTube.

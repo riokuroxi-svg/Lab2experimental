@@ -1,4 +1,4 @@
-import yts from 'yt-search'
+import yts from '#lib/youtubeSearch'
 import { fastFetch, globalFetchCache, isYtdlpAvailable } from '#lib/fastFetch'
 import fs from 'fs'
 import path from 'path'

@@ -70,3 +70,22 @@ test('PlayFast arma IDs y caption sin tocar play normal', () => {
   assert.match(caption, /MP3 con portada\/nombre Ginko/);
   assert.match(caption, /no reemplaza \.play\/\.mp3/i);
 });
+
+
+import ytsSafe, { __youtubeSearchTest } from '../core/lib/youtubeSearch.js';
+
+test('YouTube search seguro parsea videoRenderer sin yt-search', () => {
+  const initial = 'x var ytInitialData = {"contents":{"videoRenderer":{"videoId":"abcdefghijk","title":{"runs":[{"text":"Demo"}]},"thumbnail":{"thumbnails":[{"url":"small"},{"url":"big"}]},"ownerText":{"runs":[{"text":"Canal"}]},"lengthText":{"simpleText":"1:23"},"viewCountText":{"simpleText":"1,234 views"}}}};</script>';
+  const json = __youtubeSearchTest.extractJsonObject(initial);
+  const videos = __youtubeSearchTest.collectVideos(JSON.parse(json));
+  assert.equal(videos[0].videoId, 'abcdefghijk');
+  assert.equal(videos[0].title, 'Demo');
+  assert.equal(videos[0].thumbnail, 'big');
+  assert.equal(videos[0].views, 1234);
+});
+
+test('YouTube search seguro resuelve videoId con oEmbed', async () => {
+  const info = await ytsSafe({ videoId: 'te7oRUy0L4U' });
+  assert.equal(info.videoId, 'te7oRUy0L4U');
+  assert.match(info.title, /Marlboro Rojo/i);
+});

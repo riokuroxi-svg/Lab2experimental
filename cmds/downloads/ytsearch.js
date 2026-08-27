@@ -1,4 +1,4 @@
-import yts from 'yt-search'
+import yts from '#lib/youtubeSearch'
 import { getBuffer } from '#serialize'
 
 export default {

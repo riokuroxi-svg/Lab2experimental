@@ -1,4 +1,4 @@
-import yts from 'yt-search';
+import yts from '#lib/youtubeSearch';
 import { fastFetch, isYtdlpAvailable } from '#lib/fastFetch';
 import { adquirir } from '#lib/humanize';
 import { getSelectedResponse } from '#lib/interactive-response';
@@ -64,7 +64,7 @@ async function resolveVideo(input) {
     channel: video.author?.name || video.author || 'Desconocido',
     thumbnail: video.thumbnail || video.image || (video.videoId ? `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg` : null),
     duration: video.timestamp || '??',
-    source: 'yt-search',
+    source: 'YouTube search',
   };
 }
 
