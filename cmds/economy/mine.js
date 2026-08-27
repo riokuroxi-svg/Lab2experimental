@@ -1,5 +1,15 @@
 import db from '#db';
 import { geminiGenerate } from '#lib/geminiRole';
+import {
+  addIdentity,
+  collectOwnerIdentities,
+  createEventToken,
+  expandWithParticipants,
+  normalizeIdentityJid,
+  parseActionButtonId,
+  participantIdentities,
+  sameIdentity,
+} from '#lib/jidIdentity';
 
 /**
  * .mine / .minar / .excavar
@@ -41,18 +51,8 @@ function registrarListener(sock) {
   });
 }
 
-// Normaliza un JID a su forma base (número@s.whatsapp.net o grupo@g.us)
-// para que no importe si viene :0@lid, :16@s.whatsapp.net, etc.
-function jidBase(jid) {
-  if (!jid) return '';
-  let s = String(jid);
-  // Quitar cualquier cosa después de ':' en la parte del usuario (salvo el @)
-  s = s.replace(/^(\d+):\d+@/, '$1@');
-  // Convertir @lid a @s.whatsapp.net (formato antiguo usado en algunas versiones)
-  if (s.endsWith('@lid')) {
-    s = s.replace(/@lid$/, '@s.whatsapp.net');
-  }
-  return s;
+function parseMineButtonId(buttonId = '') {
+  return parseActionButtonId(buttonId, BTN_PREFIX);
 }
 
 async function procesarRespuesta(sock, m) {
@@ -61,20 +61,27 @@ async function procesarRespuesta(sock, m) {
 
   const brm = m.message?.buttonsResponseMessage;
   const bid = brm?.selectedButtonId;
-  if (!bid || !String(bid).startsWith(BTN_PREFIX)) return;
+  const parsed = parseMineButtonId(bid);
+  if (!parsed) return;
   const stanzaId = brm.contextInfo?.stanzaId;
-  if (!stanzaId) return;
-  const job = pending.get(stanzaId);
+  const job = (stanzaId && pending.get(stanzaId)) || (parsed.token && pending.get(parsed.token));
   if (!job) return;
-  if (jidBase(m.key.remoteJid) !== jidBase(job.chatId)) return;
-  // Solo el usuario que minó puede responder (compara números base)
-  const quienResponde = jidBase(m.key.participant || m.key.remoteJid);
-  const dueno = jidBase(job.userId);
-  if (m.key.remoteJid.endsWith('@g.us') && quienResponde !== dueno) {
-    return sock.sendMessage(job.chatId, { text: '✖ Este evento no es tuyo.' }, { quoted: m }).catch(() => {});
+  if (normalizeIdentityJid(m.key.remoteJid) !== normalizeIdentityJid(job.chatId)) return;
+
+  // Solo el usuario que generó la minería puede responder. En grupos WhatsApp
+  // puede entregar el tap como @lid, phoneNumber o id con :device; por eso
+  // comparamos todas las identidades conocidas del participante, no solo strings.
+  if (String(m.key.remoteJid || '').endsWith('@g.us')) {
+    const responderIds = await collectResponderIdentities(sock, m, job);
+    if (!sameIdentity(responderIds, job.ownerIds || [job.userId])) {
+      return sock.sendMessage(job.chatId, { text: '✖ Este evento no es tuyo.' }, { quoted: m }).catch(() => {});
+    }
   }
-  pending.delete(stanzaId);
-  const eligeSi = String(bid).startsWith(BTN_PREFIX + 'si_');
+
+  for (const key of job.pendingKeys || [stanzaId, parsed.token]) {
+    if (key) pending.delete(key);
+  }
+  const eligeSi = parsed.action === 'si';
   await resolverEvento(sock, job, eligeSi, m);
 }
 
@@ -227,7 +234,7 @@ export default {
   command: ['mine', 'minar', 'excavar'],
   category: 'economy',
   description: 'Realizar trabajos de minería y ganar coins.',
-  run: async ({ msg, sock, usedPrefix }) => {
+  run: async ({ msg, sock, usedPrefix, groupMetadata }) => {
     const chat = db.getChat(msg.chat);
     if (chat.adminonly || !chat.economy) {
       return msg.reply(`ꕥ Los comandos de *Economía* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con el comando:\n» *${usedPrefix}economy on*`);
@@ -320,9 +327,10 @@ export default {
     // ── Evento aleatorio con botones ──
     registrarListener(sock);
     const evento = pickRandom(eventos);
+    const eventToken = createEventToken();
     const botones = [
-      { buttonId: `${BTN_PREFIX}si_${evento.id}`, buttonText: { displayText: evento.txtSi }, type: 1 },
-      { buttonId: `${BTN_PREFIX}no_${evento.id}`, buttonText: { displayText: evento.txtNo }, type: 1 },
+      { buttonId: `${BTN_PREFIX}${eventToken}_si_${evento.id}`, buttonText: { displayText: evento.txtSi }, type: 1 },
+      { buttonId: `${BTN_PREFIX}${eventToken}_no_${evento.id}`, buttonText: { displayText: evento.txtNo }, type: 1 },
     ];
 
     const textoEvento = `\n\n📦 *${evento.titulo}*\n${evento.descripcion}`;
@@ -346,14 +354,28 @@ export default {
     }
 
     if (card?.key?.id) {
-      getPendingMap(sock).set(card.key.id, {
+      const pendingKeys = [card.key.id, eventToken];
+      const job = {
         ts: Date.now(),
         userId: msg.sender,
+        ownerIds: collectOwnerIdentities(msg, groupMetadata),
+        participants: groupMetadata?.participants || [],
         evento,
         user,
         monedas,
         chatId: msg.chat,
-      });
+        pendingKeys,
+      };
+      for (const key of pendingKeys) getPendingMap(sock).set(key, job);
     }
   },
+};
+
+export const __mineEventTest = {
+  normalizeIdentityJid,
+  participantIdentities,
+  expandWithParticipants,
+  collectOwnerIdentities,
+  sameIdentity,
+  parseMineButtonId,
 };

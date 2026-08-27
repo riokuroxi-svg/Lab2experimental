@@ -1,4 +1,4 @@
-import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode } from 'baileys';
+import makeWASocket, { Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, DisconnectReason, jidDecode, generateWAMessageFromContent } from 'baileys';
 import { useSQLiteAuthState } from '#lib/sqliteAuth';
 import { ritmoHumano } from '#lib/humanize';
 import NodeCache from 'node-cache';
@@ -9,6 +9,8 @@ import pino from 'pino';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import { randomBytes } from 'node:crypto';
+import { buildPairingCodeMessage, PAIRING_CODE_TTL_SECONDS } from '#lib/pairingCodeMessage';
 import { smsg, patchGroupMetadata, getCachedMeta } from '#serialize';
 import db from '#db';
 
@@ -66,6 +68,93 @@ function backoffDelay(attempt, baseMs = 4000, maxMs = 45000, jitterMs = 2000) {
   const exponential = baseMs * Math.pow(1.6, Math.min(attempt, 8));
   const capped = Math.min(maxMs, exponential);
   return Math.max(2000, capped + (Math.random() * jitterMs * 2 - jitterMs));
+}
+
+function buildCodeMessageContextInfo() {
+  return {
+    deviceListMetadata: {
+      senderKeyIndexes: [],
+      recipientKeyIndexes: [],
+      recipientKeyHash: '',
+      recipientTimestamp: Math.floor(Date.now() / 1000),
+    },
+    deviceListMetadataVersion: 2,
+    messageSecret: randomBytes(32),
+  };
+}
+
+function buildBizNode() {
+  return {
+    tag: 'biz',
+    attrs: {
+      actual_actors: '2',
+      host_storage: '2',
+      privacy_mode_ts: Math.floor(Date.now() / 1000).toString(),
+    },
+    content: [{
+      tag: 'interactive',
+      attrs: { type: 'native_flow', v: '1' },
+      content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }],
+    }],
+  };
+}
+
+export async function sendPairingCodeMessage({ sock, jid, code, quoted, validitySeconds = PAIRING_CODE_TTL_SECONDS } = {}) {
+  const codeText = String(code || '').trim();
+  const copyCode = codeText.replace(/[^A-Za-z0-9]/g, '') || codeText;
+  const body = buildPairingCodeMessage(codeText, validitySeconds);
+
+  // Ruta preferida: botón nativo que copia el código. Si el cliente/fork no lo
+  // soporta, caemos a quick-reply clásico sin romper la vinculación.
+  try {
+    if (!sock?.relayMessage) throw new Error('relayMessage no disponible');
+    const content = {
+      viewOnceMessage: {
+        message: {
+          messageContextInfo: buildCodeMessageContextInfo(),
+          interactiveMessage: {
+            header: { title: 'Sub-Bot — Code', subtitle: '', hasMediaAttachment: false },
+            body: { text: body },
+            footer: { text: `Válido por ${validitySeconds} segundos` },
+            nativeFlowMessage: {
+              buttons: [{
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                  display_text: '📋 Copiar Código',
+                  id: 'ginko_pairing_code_copy',
+                  copy_code: copyCode,
+                }),
+              }],
+              messageVersion: 1,
+            },
+          },
+        },
+      },
+    };
+    const generated = generateWAMessageFromContent(jid, content, {
+      userJid: sock.user?.id,
+      quoted,
+      timestamp: new Date(),
+    });
+    if (!generated?.key?.id || !generated.message) throw new Error('No se pudo generar mensaje de código');
+    await sock.relayMessage(jid, generated.message, {
+      messageId: generated.key.id,
+      additionalNodes: [buildBizNode()],
+    });
+    return { key: generated.key, nativeCopy: true };
+  } catch (error) {
+    const fallback = await sock.sendMessage(jid, {
+      text: body,
+      footerText: `Válido por ${validitySeconds} segundos`,
+      buttons: [{
+        buttonId: `ginko_copy_code_${copyCode}`,
+        buttonText: { displayText: '📋 Copiar Código' },
+        type: 1,
+      }],
+      headerType: 1,
+    }, { quoted });
+    return { ...fallback, nativeCopy: false, nativeError: error };
+  }
 }
 
 export async function startSubBot(msg, client, caption = '', isCode = false, phone = '', chatId = '', isCommand = false) {
@@ -197,13 +286,17 @@ export async function startSubBot(msg, client, caption = '', isCode = false, pho
       try {
         let codeGen = await socks.requestPairingCode(phone);
         codeGen = codeGen.match(/.{1,4}/g)?.join('-') || codeGen;
-        const sentMsg = await socks.client.sendMessage(chatId, { text: caption }, { quoted: msg });
-        const msgCode = await socks.client.sendMessage(chatId, { text: codeGen }, { quoted: msg });
+        const msgCode = await sendPairingCodeMessage({
+          sock: socks.client,
+          jid: chatId,
+          code: codeGen,
+          quoted: msg,
+          validitySeconds: PAIRING_CODE_TTL_SECONDS,
+        });
         delete commandFlags[senderId];
         setTimeout(async () => {
-          try { await socks.client.sendMessage(chatId, { delete: sentMsg.key }); } catch {}
           try { await socks.client.sendMessage(chatId, { delete: msgCode.key }); } catch {}
-        }, 60000);
+        }, PAIRING_CODE_TTL_SECONDS * 1000);
       } catch (err) { console.error('[Código Error]', err); }
     }
     if (qr && !isCode && socks.client && chatId && senderId && commandFlags[senderId]) {
@@ -252,11 +345,10 @@ export default {
       return sock.reply(msg.chat, '✐ No se han encontrado espacios disponibles para registrar un `Sub-Bot`.', msg);
     }
     commandFlags[msg.sender] = true;
-    const rtx = '`✤` Vincula tu *cuenta* usando el *codigo.*\n\n> ✥ Sigue las *instrucciones*\n\n*›* Click en los *3 puntos*\n*›* Toque *dispositivos vinculados*\n*›* Vincular *nuevo dispositivo*\n*›* Selecciona *Vincular con el número de teléfono*\n\nꕤ *`Importante`*\n> ₊·( 🜸 ) ➭ Este *Código* solo funciona en el *número que lo solicito*';
     const rtx2 = '`✤` Vincula tu *cuenta* usando *codigo qr.*\n\n> ✥ Sigue las *instrucciones*\n\n*›* Click en los *3 puntos*\n*›* Toque *dispositivos vinculados*\n*›* Vincular *nuevo dispositivo*\n*›* Escanea el código *QR.*\n\n> ₊·( 🜸 ) ➭ Recuerda que no es recomendable usar tu cuenta principal para registrar un socket.';
     const isCode = /^(code)$/.test(command);
     const isCommand = /^(code|qr)$/.test(command);
-    const caption = isCode ? rtx : rtx2;
+    const caption = isCode ? '' : rtx2;
     const fullArgs = args.join(' ');
     const separatorIndex = fullArgs.search(/[|•\/]/);
     const rawPhone = separatorIndex === -1 ? fullArgs.trim() : fullArgs.slice(separatorIndex + 1).trim();
