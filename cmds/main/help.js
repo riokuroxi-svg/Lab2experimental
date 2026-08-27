@@ -191,7 +191,7 @@ const menuCommand = {
           jid: msg.chat,
           body: nativeBody,
           footer: `${namebot} · menú nativo`,
-          title: 'Categorías',
+          title: '🌸 Categorías',
           quoted: msg,
           bannerBuffer: banner === LOCAL_BANNER ? getBannerBuffer() : null,
         });

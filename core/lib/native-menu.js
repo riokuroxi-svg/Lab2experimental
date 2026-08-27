@@ -9,31 +9,41 @@ export const MAX_NATIVE_MENU_ROWS = 14;
 // Los IDs son deliberadamente propios del menú para no confundirse con otros
 // listeners de botones (por ejemplo, el selector de YouTube).
 const CATEGORY_DEFINITIONS = [
-  { key: 'downloads', title: 'Descargas', description: 'YouTube, música, videos y archivos.' },
-  { key: 'economia', title: 'Economía', description: 'Coins, banco, negocios y rankings.' },
-  { key: 'fun', title: 'Entretenimiento', description: 'Juegos, diversión y respuestas.' },
-  { key: 'gacha', title: 'Gacha', description: 'RPG, personajes y colecciones.' },
-  { key: 'main', title: 'Principal', description: 'Comandos generales del bot.' },
-  { key: 'grupo', title: 'Grupos', description: 'Administración y configuración de grupos.' },
-  { key: 'anime', title: 'Anime', description: 'Anime, búsquedas y reacciones.' },
-  { key: 'nsfw', title: 'NSFW', description: 'Contenido para adultos.' },
-  { key: 'profile', title: 'Perfil', description: 'Tu perfil, nivel y estadísticas.' },
-  { key: 'sockets', title: 'Sockets', description: 'Sockets y sub-bots.' },
-  { key: 'stickers', title: 'Stickers', description: 'Stickers, packs y conversiones.' },
-  { key: 'utils', title: 'Utilidades', description: 'Herramientas y comandos útiles.' },
+  { key: 'downloads', icon: '📥', title: 'Descargas', description: 'YouTube, música, videos y archivos.' },
+  { key: 'economia', icon: '💰', title: 'Economía', description: 'Coins, banco, negocios y rankings.' },
+  { key: 'fun', icon: '🎮', title: 'Entretenimiento', description: 'Juegos, diversión y respuestas.' },
+  { key: 'gacha', icon: '🎴', title: 'Gacha', description: 'RPG, personajes y colecciones.' },
+  { key: 'main', icon: '🏠', title: 'Principal', description: 'Comandos generales del bot.' },
+  { key: 'grupo', icon: '👥', title: 'Grupos', description: 'Administración y configuración de grupos.' },
+  { key: 'anime', icon: '🎌', title: 'Anime', description: 'Anime, búsquedas y reacciones.' },
+  { key: 'nsfw', icon: '🔞', title: 'NSFW', description: 'Contenido para adultos.' },
+  { key: 'profile', icon: '👤', title: 'Perfiles', description: 'Tu perfil, nivel y estadísticas.' },
+  { key: 'sockets', icon: '🔌', title: 'Sockets', description: 'Sockets y sub-bots.' },
+  { key: 'stickers', icon: '🖼️', title: 'Stickers', description: 'Stickers, packs y conversiones.' },
+  { key: 'utils', icon: '🛠️', title: 'Utilidades', description: 'Herramientas y comandos útiles.' },
 ];
 
 export const NATIVE_MENU_CATEGORIES = Object.freeze(CATEGORY_DEFINITIONS.map((category) => Object.freeze({ ...category })));
+
+function getCategoryCommandCount(key) {
+  return String(menuObject[key] || '')
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('ꕤ *'))
+    .length;
+}
 
 export function getNativeMenuRows() {
   return NATIVE_MENU_CATEGORIES
     .filter(({ key }) => Object.prototype.hasOwnProperty.call(menuObject, key))
     .slice(0, MAX_NATIVE_MENU_ROWS)
-    .map(({ key, title, description }) => ({
-      id: `${NATIVE_MENU_PREFIX}${key}`,
-      title,
-      description,
-    }));
+    .map(({ key, icon, title, description }) => {
+      const count = getCategoryCommandCount(key);
+      return {
+        id: `${NATIVE_MENU_PREFIX}${key}`,
+        title,
+        description: `${icon} ${description} · ${count} ${count === 1 ? 'comando' : 'comandos'}`,
+      };
+    });
 }
 
 function buildMessageContextInfo() {
@@ -80,7 +90,7 @@ export function buildNativeMenuContent({
         name: 'single_select',
         buttonParamsJson: JSON.stringify({
           title: String(title),
-          sections: [{ title: 'Categorías', rows }],
+          sections: [{ title: '✨ Categorías', rows }],
         }),
       }],
       messageVersion: 1,

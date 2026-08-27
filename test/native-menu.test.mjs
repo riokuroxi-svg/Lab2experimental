@@ -38,12 +38,15 @@ test('construye single_select con categorías visibles y filas limitadas', () =>
     'Principal',
     'Grupos',
   ]);
+  assert.match(rows[0].description, /📥 .*13 comandos/);
+  assert.match(rows[4].description, /🏠 .*7 comandos/);
 
   const content = buildNativeMenuContent({ body: 'elige', footer: 'fallback', wrapViewOnce: true });
   const interactive = content.viewOnceMessage.message.interactiveMessage;
   assert.equal(interactive.nativeFlowMessage.buttons[0].name, 'single_select');
   const params = JSON.parse(interactive.nativeFlowMessage.buttons[0].buttonParamsJson);
   assert.equal(params.title, 'Categorías');
+  assert.equal(params.sections[0].title, '✨ Categorías');
   assert.equal(params.sections[0].rows.length, rows.length);
   assert.equal(params.sections[0].rows[0].id, 'gkmenu:downloads');
   assert.equal(interactive.header.hasMediaAttachment, false);
