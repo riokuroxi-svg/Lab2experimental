@@ -11,3 +11,4 @@ package-lock.json
 *.db-wal
 *.db-shm
 backups/
+cache/

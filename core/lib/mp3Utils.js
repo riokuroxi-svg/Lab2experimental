@@ -225,10 +225,10 @@ export async function addCustomCoverToMp3(inputBuffer, titulo, artista) {
 export async function downloadAudioYtdlp(url, modo = 'fast', ytdlpPath = 'yt-dlp') {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ginko-dl-'));
   const outTemplate = path.join(tmpDir, 'audio.%(ext)s');
-  let audioQuality = '5'; // ~128k por defecto (modo fast usa 9 = ~96k)
-  if (modo === 'mp3') audioQuality = '0'; // 320k
-  if (modo === 'normal') audioQuality = '5'; // ~128k
-  if (modo === 'fast') audioQuality = '9'; // ~96k (ligero)
+  let audioQuality = '128K'; // estándar MP3 pasable sin inflar demasiado el archivo
+  if (modo === 'mp3') audioQuality = '192K'; // alta sin peso exagerado para WhatsApp
+  if (modo === 'normal') audioQuality = '128K';
+  if (modo === 'fast') audioQuality = '128K';
 
   const args = [
     '-f', 'bestaudio/best',

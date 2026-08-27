@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import crypto from 'crypto'
 import { downloadAudioYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils'
 import { adquirir } from '#lib/humanize'
 import { getSelectedResponse } from '#lib/interactive-response'
@@ -21,6 +22,9 @@ const MAX_MB_VIDEO = 100 * 1024 * 1024
 const MB = 1024 * 1024
 const AUDIO_CACHE_TTL_MS = 10 * 60 * 1000
 const MAX_AUDIO_CACHE_ENTRIES = 6
+const DISK_AUDIO_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const MAX_DISK_AUDIO_CACHE_BYTES = 350 * MB
+const DISK_AUDIO_CACHE_DIR = path.join(process.cwd(), 'cache', 'play-audio')
 
 const ALIAS_MENU = ['play']
 const ALIAS_AUDIO_DIRECTO = ['mp3', 'ytmp3', 'ytaudio', 'playaudio']
@@ -202,7 +206,71 @@ function audioCacheKey(job = {}) {
   return job.videoId || getVideoId(job.url) || job.url
 }
 
+function audioDiskCachePaths(job = {}) {
+  const rawKey = audioCacheKey(job)
+  if (!rawKey) return null
+  const key = crypto.createHash('sha1').update(String(rawKey)).digest('hex')
+  return {
+    audio: path.join(DISK_AUDIO_CACHE_DIR, `${key}.mp3`),
+    meta: path.join(DISK_AUDIO_CACHE_DIR, `${key}.json`),
+  }
+}
+
+function leerAudioDiskCache(job = {}) {
+  try {
+    const paths = audioDiskCachePaths(job)
+    if (!paths || !fs.existsSync(paths.audio) || !fs.existsSync(paths.meta)) return null
+    const meta = JSON.parse(fs.readFileSync(paths.meta, 'utf8'))
+    if (!meta?.createdAt || Date.now() - meta.createdAt > DISK_AUDIO_CACHE_TTL_MS) return null
+    const stat = fs.statSync(paths.audio)
+    if (!stat.size || stat.size > MAX_MB_AUDIO) return null
+    const buffer = fs.readFileSync(paths.audio)
+    if (!isMp3Valid(buffer)) return null
+    fs.utimesSync(paths.audio, new Date(), new Date())
+    return { buffer, seconds: Number(meta.seconds || 0), cached: 'disk' }
+  } catch {
+    return null
+  }
+}
+
+function limpiarAudioDiskCache() {
+  try {
+    if (!fs.existsSync(DISK_AUDIO_CACHE_DIR)) return
+    const files = fs.readdirSync(DISK_AUDIO_CACHE_DIR)
+      .filter((name) => name.endsWith('.mp3'))
+      .map((name) => {
+        const file = path.join(DISK_AUDIO_CACHE_DIR, name)
+        const stat = fs.statSync(file)
+        return { file, meta: file.replace(/\.mp3$/, '.json'), size: stat.size, mtimeMs: stat.mtimeMs }
+      })
+      .sort((a, b) => a.mtimeMs - b.mtimeMs)
+    let total = files.reduce((sum, file) => sum + file.size, 0)
+    for (const entry of files) {
+      if (total <= MAX_DISK_AUDIO_CACHE_BYTES) break
+      total -= entry.size
+      try { fs.rmSync(entry.file, { force: true }) } catch {}
+      try { fs.rmSync(entry.meta, { force: true }) } catch {}
+    }
+  } catch {}
+}
+
+function guardarAudioDiskCache(job = {}, result = {}) {
+  try {
+    if (!result?.buffer?.length || result.buffer.length > MAX_MB_AUDIO) return
+    const paths = audioDiskCachePaths(job)
+    if (!paths) return
+    fs.mkdirSync(DISK_AUDIO_CACHE_DIR, { recursive: true })
+    fs.writeFileSync(paths.audio, result.buffer)
+    fs.writeFileSync(paths.meta, JSON.stringify({ createdAt: Date.now(), seconds: result.seconds || 0, title: job.title || 'Audio' }))
+    limpiarAudioDiskCache()
+  } catch (e) {
+    console.log('[play] no se pudo guardar cache audio:', e.message?.slice(0, 120))
+  }
+}
+
 async function prepararAudioProcesado(job) {
+  const cached = leerAudioDiskCache(job)
+  if (cached) return cached
   const audioDescargado = await descargarAudioSmart(job.url)
   const buffer = audioDescargado.buffer
   if (buffer.length > MAX_MB_AUDIO) throw new Error('Archivo muy grande (>50MB)')
@@ -213,7 +281,9 @@ async function prepararAudioProcesado(job) {
     128,
     audioDescargado?.origen || (ytdlpDisponible ? 'local' : 'api')
   )
-  return { buffer: procesado.buffer || buffer, seconds: procesado.seconds || 0 }
+  const result = { buffer: procesado.buffer || buffer, seconds: procesado.seconds || 0 }
+  guardarAudioDiskCache(job, result)
+  return result
 }
 
 function obtenerAudioProcesado(job) {
