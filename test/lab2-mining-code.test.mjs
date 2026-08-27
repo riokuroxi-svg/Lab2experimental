@@ -94,7 +94,33 @@ test('Instagram preview usa fallback cuando la miniatura real es débil', () => 
     jpegThumbnail: Buffer.alloc(3730),
   };
   assert.equal(__richUiTest.isWeakInstagramThumbnail(weak), true);
+  assert.equal(__richUiTest.isWeakInstagramThumbnail({ ...weak, highQualityThumbnail: { url: 'weak-uploaded' } }), true);
   const finalPreview = __richUiTest.applyInstagramPreviewFallback(weak, 'https://www.instagram.com/');
   assert.ok(finalPreview.jpegThumbnail.length > weak.jpegThumbnail.length);
   assert.match(finalPreview.description, /Instagram oficial/);
+});
+
+test('Instagram fallback prepara highQualityThumbnail subido como thumbnail-link', async () => {
+  const image = await __richUiTest.prepareLinkPreviewFallbackImage({
+    waUploadToServer: async () => ({
+      mediaUrl: 'https://wa.example/uploaded',
+      directPath: '/v/t62.fake-thumbnail',
+    }),
+  });
+  assert.ok(image);
+  assert.equal(image.width, 480);
+  assert.equal(image.height, 720);
+  assert.equal(image.url, 'https://wa.example/uploaded');
+  assert.equal(image.directPath, '/v/t62.fake-thumbnail');
+  assert.ok(image.jpegThumbnail?.length > 0);
+
+  const finalPreview = __richUiTest.applyInstagramPreviewFallback({
+    'matched-text': 'https://www.instagram.com/',
+    'canonical-url': 'https://www.instagram.com/',
+    title: 'Instagram',
+    originalThumbnailUrl: 'data:image/png;base64,abc',
+    jpegThumbnail: Buffer.alloc(3730),
+  }, 'https://www.instagram.com/', { highQualityThumbnail: image });
+
+  assert.equal(finalPreview.highQualityThumbnail, image);
 });

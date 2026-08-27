@@ -89,3 +89,5 @@ core/lib/rich-ui.js
 - sendStandardLinkPreview()
 - sendInstagramPreview()
 ```
+
+Nota Lab2: cuando Instagram entregue solo favicon/data-uri o miniatura débil, `sendInstagramPreview()` puede usar `assets/link-preview-fallback.jpg` como respaldo. Ese respaldo debe ir también como `highQualityThumbnail` real subido con `prepareWAMessageMedia(..., { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })`, no solo como bytes en `jpegThumbnail`.

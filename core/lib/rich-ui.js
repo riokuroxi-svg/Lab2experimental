@@ -70,10 +70,14 @@ function hasPreviewThumbnail(preview) {
 }
 
 function isWeakInstagramThumbnail(preview) {
-  if (!preview || preview.highQualityThumbnail) return false;
+  if (!preview) return false;
   const thumbBytes = preview.jpegThumbnail?.length || 0;
   const original = String(preview.originalThumbnailUrl || '');
-  return !thumbBytes || thumbBytes < 8 * 1024 || original.startsWith('data:image/');
+  // Si Instagram entrega un data-uri, normalmente es un favicon/logo pequeño.
+  // Incluso si WaSocket logra subirlo como highQualityThumbnail, seguiría siendo
+  // una imagen débil; por eso lo tratamos como fallback-candidate.
+  if (original.startsWith('data:image/')) return true;
+  return !preview.highQualityThumbnail && (!thumbBytes || thumbBytes < 8 * 1024);
 }
 
 function readLinkPreviewFallback() {
@@ -125,7 +129,29 @@ function logInstagramPreview(preview, stage = 'raw') {
   }));
 }
 
-function applyInstagramPreviewFallback(preview, url) {
+async function prepareLinkPreviewFallbackImage(sock) {
+  if (typeof sock?.waUploadToServer !== 'function') return null;
+  if (!fs.existsSync(LINK_PREVIEW_FALLBACK_IMAGE)) return null;
+  try {
+    const { imageMessage } = await prepareWAMessageMedia(
+      { image: { url: LINK_PREVIEW_FALLBACK_IMAGE } },
+      {
+        upload: sock.waUploadToServer,
+        mediaTypeOverride: 'thumbnail-link',
+      },
+    );
+    if (!imageMessage) return null;
+    // Patrón de thumbnail-link: objeto ImageMessage subido a WA con dimensiones de card grande.
+    imageMessage.height = 720;
+    imageMessage.width = 480;
+    return imageMessage;
+  } catch (error) {
+    console.warn('[rich-ui] no se pudo subir fallback highQualityThumbnail:', error?.message || error);
+    return null;
+  }
+}
+
+function applyInstagramPreviewFallback(preview, url, { highQualityThumbnail } = {}) {
   if (!isInstagramUrl(url)) return preview;
   // Instagram suele devolver solo un favicon/data-uri pequeño. Técnicamente
   // hay thumbnail, pero WhatsApp puede renderizarlo como preview pobre o sin
@@ -142,8 +168,16 @@ function applyInstagramPreviewFallback(preview, url) {
     description: preview?.description || 'Instagram oficial del proyecto.',
     originalThumbnailUrl: preview?.originalThumbnailUrl,
     jpegThumbnail: fallback,
+    ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
     previewType: 0,
   };
+}
+
+async function applyInstagramPreviewFallbackIfNeeded(preview, url, sock) {
+  if (!isInstagramUrl(url)) return preview;
+  if (hasPreviewThumbnail(preview) && !isWeakInstagramThumbnail(preview)) return preview;
+  const highQualityThumbnail = await prepareLinkPreviewFallbackImage(sock);
+  return applyInstagramPreviewFallback(preview, url, { highQualityThumbnail });
 }
 
 export async function generateStandardLinkPreview({ sock, url, text, highQuality = true, timeout = 5000 } = {}) {
@@ -169,12 +203,12 @@ export async function generateStandardLinkPreview({ sock, url, text, highQuality
         : undefined,
     });
     if (instagram) logInstagramPreview(preview, 'raw');
-    const finalPreview = applyInstagramPreviewFallback(preview, normalizedUrl);
+    const finalPreview = await applyInstagramPreviewFallbackIfNeeded(preview, normalizedUrl, sock);
     if (instagram && finalPreview !== preview) logInstagramPreview(finalPreview, 'fallback-applied');
     return finalPreview;
   } catch (error) {
     console.warn('[rich-ui] link preview falló:', error?.message || error);
-    const fallbackPreview = applyInstagramPreviewFallback(null, normalizedUrl);
+    const fallbackPreview = await applyInstagramPreviewFallbackIfNeeded(null, normalizedUrl, sock);
     if (instagram) logInstagramPreview(fallbackPreview, 'fallback-after-error');
     return fallbackPreview;
   }
@@ -381,7 +415,9 @@ export const __richUiTest = {
   hasPreviewThumbnail,
   isWeakInstagramThumbnail,
   summarizePreviewForLog,
+  prepareLinkPreviewFallbackImage,
   applyInstagramPreviewFallback,
+  applyInstagramPreviewFallbackIfNeeded,
 };
 
 export default {
