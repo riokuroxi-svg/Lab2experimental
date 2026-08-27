@@ -185,7 +185,7 @@ const menuCommand = {
       // como header multimedia; si la serialización, la subida o el relay
       // fallan, se continúa por la ruta manual de abajo sin perder la imagen.
       if (command === 'menu' && !cat) {
-        const nativeBody = `🌸 *${namebot}*\\nSelecciona una categoría para ver sus comandos.\\n\\n> Si tu WhatsApp no muestra el selector, usa *${usedPrefix}menumanual*.`;
+        const nativeBody = `🌸 *${namebot}*\nSelecciona una categoría para ver sus comandos.\n\n> Si tu WhatsApp no muestra el selector, usa *${usedPrefix}menumanual*.`;
         const nativeResult = await sendNativeCategoryMenu({
           sock,
           jid: msg.chat,
