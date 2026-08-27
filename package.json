@@ -48,6 +48,7 @@
     "grapheme-splitter": "^1.0.4",
     "human-readable": "^0.2.1",
     "jimp": "latest",
+    "link-preview-js": "^3.2.0",
     "lodash": "latest",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.37",
