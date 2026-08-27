@@ -112,7 +112,7 @@ test('Instagram fallback prepara highQualityThumbnail subido como thumbnail-link
   assert.equal(image.height, 720);
   assert.equal(image.url, 'https://wa.example/uploaded');
   assert.equal(image.directPath, '/v/t62.fake-thumbnail');
-  assert.ok(image.jpegThumbnail?.length > 0);
+  assert.ok(image.fileSha256?.length > 0);
 
   const finalPreview = __richUiTest.applyInstagramPreviewFallback({
     'matched-text': 'https://www.instagram.com/',

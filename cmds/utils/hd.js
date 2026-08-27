@@ -1,11 +1,10 @@
 import crypto from 'crypto'
-import fileTypePkg from 'file-type'
+import { fileTypeFromBuffer } from 'file-type'
 import { promises as fsp } from 'fs'
 import os from 'os'
 import path from 'path'
 import { spawn } from 'child_process'
 
-const { fileTypeFromBuffer } = fileTypePkg
 const fetchFn = fetch
 
 export default {

@@ -1,7 +1,7 @@
 import { proto, delay, areJidsSameUser, generateWAMessage, generateWAMessageFromContent, generateWAMessageContent, prepareWAMessageMedia, downloadContentFromMessage, getContentType, getDevice, extractMessageContent, jidDecode } from 'baileys';
 import fs from 'fs';
 import crypto from 'crypto';
-import FileType from 'file-type';
+import * as FileType from 'file-type';
 import path from 'path';
 import exif from './exif.js';
 import db from '#db';
@@ -349,7 +349,7 @@ export async function smsg(sock, msg, store) {
           const res = await fastFetch(content, { timeout: 10000 });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const data = Buffer.from(await res.arrayBuffer());
-          const type = await FileType.fromBuffer(data);
+          const type = await (FileType.fileTypeFromBuffer ? FileType.fileTypeFromBuffer(data) : FileType.fromBuffer(data));
           const mime = res.headers.get('content-type') || type?.mime;
           if (/gif|image|video|audio|pdf|stream/i.test(mime || '')) {
             return sock.sendFile(chat, data, 'file', caption, quoted);
@@ -396,7 +396,7 @@ export async function smsg(sock, msg, store) {
     else if (/^https?:\/\//.test(p)) buffer = await getBuffer(p);
     else if (fs.existsSync(p)) buffer = fs.readFileSync(p);
     else throw new Error('Ruta o buffer inválido');
-    const type = (await FileType.fromBuffer(buffer)) ?? { mime: 'application/octet-stream', ext: 'bin' };
+    const type = (await (FileType.fileTypeFromBuffer ? FileType.fileTypeFromBuffer(buffer) : FileType.fromBuffer(buffer))) ?? { mime: 'application/octet-stream', ext: 'bin' };
     const mimetype = options.mimetype ?? type.mime;
     let mtype = 'document';
     if (/webp/i.test(type.mime)) mtype = 'sticker';
