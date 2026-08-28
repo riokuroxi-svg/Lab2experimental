@@ -556,13 +556,15 @@ const cmd = {
         {buttonId:`${cardToken}_pv`, buttonText:{displayText:'🎬 Video MP4'}, type:1}
       ] : []
       const payload = usarBotones&&thumbnail ? {image:{url:thumbnail},caption,footerText:'❦ Ginko-MD',buttons:botones,headerType:4} : thumbnail ? {image:{url:thumbnail},caption} : {text:caption}
+      const job = {cardId:null, cardKey:null, chat:msg.chat, url, videoId:foundVid, title, channel, duration, views, ago, thumbnail, usandoYtdlp:ytdlpDisponible, _commandKey:msg.key, _createdAt:Date.now(), _procesando:false, _completado:false, _token:cardToken}
+      precalentarAudio(job)
       let card
       try { card = await sock.sendMessage(msg.chat,payload,{quoted:msg}) } catch { card = await sock.sendMessage(msg.chat,thumbnail?{image:{url:thumbnail},caption}:{text:caption},{quoted:msg}).catch(async()=>await sock.sendMessage(msg.chat,{text:caption},{quoted:msg})) }
       if (!card?.key?.id) return msg.reply('❌ No se pudo enviar la tarjeta.')
-      const job = {cardId:card.key.id, cardKey:card.key, chat:msg.chat, url, videoId:foundVid, title, channel, duration, views, ago, thumbnail, usandoYtdlp:ytdlpDisponible, _commandKey:msg.key, _createdAt:Date.now(), _procesando:false, _completado:false, _token:cardToken}
+      job.cardId = card.key.id
+      job.cardKey = card.key
       getPendingMap(sock).set(card.key.id, job)
       ;(sock._ginkoPlayTokens ??= new Map()).set(cardToken, card.key.id)
-      precalentarAudio(job)
       setTimeout(()=>{const p=getPendingMap(sock); const j=p.get(card.key.id); if(j&&!j._procesando&&!j._completado){p.delete(card.key.id); try{sock._ginkoPlayTokens?.delete(j._token)}catch{}}}, PENDING_TTL_MS)
       try { await sock.sendMessage(msg.chat,{react:{text:'✅',key:msg.key}}) } catch {}
     } catch(e) {

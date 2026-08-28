@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 
 export function normalizeBenchmarkMode(mode = 'fast') {
   const raw = String(mode || 'fast').trim().toLowerCase();
+  if (['play', 'ginko', 'actual'].includes(raw)) return 'play';
   if (['mp3', '320', '320k', 'alta'].includes(raw)) return 'mp3';
   if (['normal', '128', '128k', 'medio'].includes(raw)) return 'normal';
   return 'fast';

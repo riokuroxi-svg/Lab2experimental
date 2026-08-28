@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fastFetch } from '#lib/fastFetch';
-import { downloadAudioYtdlp, isMp3Valid } from '#lib/mp3Utils';
+import { downloadAudioYtdlp, downloadAudioSourceYtdlp, processMp3ForWhatsApp, isMp3Valid } from '#lib/mp3Utils';
 import { adquirir } from '#lib/humanize';
 import {
   formatBytes,
@@ -83,19 +83,40 @@ export default {
       steps.push(oembedStep);
       if (oembedStep.ok && oembedStep.value?.title) title = oembedStep.value.title;
 
-      const metadataStep = await measureStep('metadata yt-dlp', () => getYtdlpMetadata(url));
-      steps.push(metadataStep);
-      if (metadataStep.ok && metadataStep.value?.title) title = metadataStep.value.title;
+      if (mode === 'play') {
+        let source = null;
+        const sourceStep = await measureStep('descarga fuente yt-dlp', async () => {
+          source = await downloadAudioSourceYtdlp(url, YTDLP);
+          return { bytes: source.buffer.length, ext: source.ext };
+        });
+        if (sourceStep.value) sourceStep.value = { bytes: sourceStep.value.bytes, ext: sourceStep.value.ext };
+        steps.push(sourceStep);
 
-      const downloadStep = await measureStep(`descarga audio ${mode}`, async () => {
-        const buffer = await downloadAudioYtdlp(url, mode, YTDLP);
-        audioBytes = buffer.length;
-        mp3Valid = isMp3Valid(buffer);
-        return buffer;
-      });
-      // No guardamos ni reenviamos el buffer; solo medimos tamaño/validez.
-      if (downloadStep.value) downloadStep.value = { bytes: audioBytes, mp3Valid };
-      steps.push(downloadStep);
+        if (sourceStep.ok && source?.buffer?.length) {
+          const processStep = await measureStep('proceso MP3 Ginko 128K', async () => {
+            const processed = await processMp3ForWhatsApp(source.buffer, title || 'Audio', 'Ginko Bot', 128, 'api');
+            audioBytes = processed.buffer.length;
+            mp3Valid = isMp3Valid(processed.buffer);
+            return processed;
+          });
+          if (processStep.value) processStep.value = { bytes: audioBytes, mp3Valid };
+          steps.push(processStep);
+        }
+      } else {
+        const metadataStep = await measureStep('metadata yt-dlp', () => getYtdlpMetadata(url));
+        steps.push(metadataStep);
+        if (metadataStep.ok && metadataStep.value?.title) title = metadataStep.value.title;
+
+        const downloadStep = await measureStep(`descarga audio ${mode}`, async () => {
+          const buffer = await downloadAudioYtdlp(url, mode, YTDLP);
+          audioBytes = buffer.length;
+          mp3Valid = isMp3Valid(buffer);
+          return buffer;
+        });
+        // No guardamos ni reenviamos el buffer; solo medimos tamaño/validez.
+        if (downloadStep.value) downloadStep.value = { bytes: audioBytes, mp3Valid };
+        steps.push(downloadStep);
+      }
 
       await sock.sendMessage(msg.chat, {
         text: renderBenchReport({ url, mode, steps, audioBytes, mp3Valid, title }),

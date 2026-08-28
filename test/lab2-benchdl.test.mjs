@@ -11,6 +11,8 @@ import {
 } from '../core/lib/downloadBench.js';
 
 test('BenchDL normaliza modos sin tocar play/mp3', () => {
+  assert.equal(normalizeBenchmarkMode('play'), 'play');
+  assert.equal(normalizeBenchmarkMode('ginko'), 'play');
   assert.equal(normalizeBenchmarkMode('fast'), 'fast');
   assert.equal(normalizeBenchmarkMode('rapido'), 'fast');
   assert.equal(normalizeBenchmarkMode('normal'), 'normal');
