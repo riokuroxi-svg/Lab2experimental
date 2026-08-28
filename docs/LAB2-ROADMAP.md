@@ -117,7 +117,7 @@ Estado: primer ajuste implementado para prueba real.
 
 Objetivo:
 
-- Retirar `.playfast`/`.playfats` para no mantener comandos experimentales que confundan.
+- Mantener la optimización dentro de `.play` sin comandos experimentales separados.
 - Trabajar directamente en `.play` y `.mp3` cuando el usuario ya aprobó ese enfoque.
 - Mantener botones, portada y metadatos `Ginko Bot`.
 - Evitar `yt-search`, que empezó a fallar con `_title2.trim is not a function`; Lab2 usa `core/lib/youtubeSearch.js`.
