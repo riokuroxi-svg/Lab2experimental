@@ -180,7 +180,6 @@ async function descargarAudioSmart(url) {
       return await descargarAudioFuenteYtdlp(url)
     } catch (e) {
       localError = e
-      if (process.env.GINKO_PLAY_DEBUG === '1') console.log('[play] yt-dlp falló, probando API:', resumenErrorDescarga(e))
     }
   }
   try {
@@ -270,7 +269,6 @@ function guardarAudioDiskCache(job = {}, result = {}) {
     fs.writeFileSync(paths.meta, JSON.stringify({ createdAt: Date.now(), seconds: result.seconds || 0, title: job.title || 'Audio' }))
     limpiarAudioDiskCache()
   } catch (e) {
-    console.log('[play] no se pudo guardar cache audio:', e.message?.slice(0, 120))
   }
 }
 
@@ -313,7 +311,6 @@ function precalentarAudio(job) {
   // No esperar aquí: la idea es solapar descarga/procesado con el tiempo que
   // tarda el usuario en tocar el botón de audio.
   obtenerAudioProcesado(job).catch((e) => {
-    if (process.env.GINKO_PLAY_DEBUG === '1') console.log('[play] precalentamiento audio falló:', resumenErrorDescarga(e))
   })
 }
 
