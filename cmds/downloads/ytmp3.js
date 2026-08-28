@@ -64,6 +64,14 @@ function sanitizeFilename(name = 'audio') {
     .slice(0, 120) || 'audio'
 }
 
+function parseDurationSeconds(label = '') {
+  const parts = String(label || '').trim().split(':').map((part) => Number(part))
+  if (!parts.length || parts.some((part) => !Number.isFinite(part))) return 0
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return 0
+}
+
 function esMp4Valido(buf) {
   if (!buf || buf.length < 12) return false
   try { return buf.slice(4, 8).toString('latin1') === 'ftyp' } catch { return false }
@@ -172,7 +180,7 @@ async function descargarAudioSmart(url) {
       return await descargarAudioFuenteYtdlp(url)
     } catch (e) {
       localError = e
-      console.log('[play] yt-dlp falló, probando API:', resumenErrorDescarga(e))
+      if (process.env.GINKO_PLAY_DEBUG === '1') console.log('[play] yt-dlp falló, probando API:', resumenErrorDescarga(e))
     }
   }
   try {
@@ -267,18 +275,14 @@ function guardarAudioDiskCache(job = {}, result = {}) {
 }
 
 async function prepararAudioProcesado(job) {
-  const t0 = Date.now()
   const title = sanitizeFilename(job.title || 'Audio')
   const cached = leerAudioDiskCache(job)
   if (cached) {
-    logPlayTiming('audio-cache-disk', t0, { title, mb: (cached.buffer.length / MB).toFixed(2) })
     return cached
   }
   const audioDescargado = await descargarAudioSmart(job.url)
   const buffer = audioDescargado.buffer
-  logPlayTiming('audio-download', t0, { title, origen: audioDescargado.origen, mb: (buffer.length / MB).toFixed(2) })
   if (buffer.length > MAX_MB_AUDIO) throw new Error('Archivo muy grande (>50MB)')
-  const processStart = Date.now()
   const procesado = await processMp3ForWhatsApp(
     buffer,
     title,
@@ -287,10 +291,8 @@ async function prepararAudioProcesado(job) {
     audioDescargado?.origen === 'local' ? 'local' : 'api',
     parseDurationSeconds(job.duration)
   )
-  logPlayTiming('audio-process', processStart, { title, seconds: procesado.seconds || 0, mb: ((procesado.buffer || buffer).length / MB).toFixed(2) })
   const result = { buffer: procesado.buffer || buffer, seconds: procesado.seconds || 0 }
   guardarAudioDiskCache(job, result)
-  logPlayTiming('audio-ready', t0, { title, mb: (result.buffer.length / MB).toFixed(2) })
   return result
 }
 
@@ -311,7 +313,7 @@ function precalentarAudio(job) {
   // No esperar aquí: la idea es solapar descarga/procesado con el tiempo que
   // tarda el usuario en tocar el botón de audio.
   obtenerAudioProcesado(job).catch((e) => {
-    console.log('[play] precalentamiento audio falló:', resumenErrorDescarga(e))
+    if (process.env.GINKO_PLAY_DEBUG === '1') console.log('[play] precalentamiento audio falló:', resumenErrorDescarga(e))
   })
 }
 
