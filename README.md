@@ -18,13 +18,35 @@
 
 </div>
 
-## 🧪 ¿Qué es Ginko-MD-Lab?
+## 🧭 Estado del repositorio y reglas de trabajo
+
+**Rol:** `LABORATORIO ACTIVO / EXPERIMENTAL` — zona para experimentar fuerte, medir y descartar.
+
+**Estado actual:** Banco de pruebas activo para mejoras de rendimiento, salud y UX.
+
+**Reglas:**
+
+- Aquí nacen las ideas nuevas.
+- Todo se hace por bloques pequeños.
+- Cada bloque debe probarse antes de continuar.
+- Se permite experimentar, pero no dejar basura si falla.
+- Solo lo útil, limpio y probado puede migrar a Ginko-MD o Ginko-MD-Lab.
+
+Documentos de control:
+
+- [`docs/GINKO-WORKFLOW.md`](docs/GINKO-WORKFLOW.md)
+- [`docs/GINKO-BLOCKS.md`](docs/GINKO-BLOCKS.md)
+- [`docs/GINKO-URGENT-FIXES.md`](docs/GINKO-URGENT-FIXES.md)
+
+> Regla central: laboratorio primero, estable después. Nada de arrastrar experimentos completos.
+
+## 🧪 ¿Qué es Lab2experimental?
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/riokuroxi-svg/Ginko-MD-Lab/main/media/menu.jpg" alt="Menú de prueba (Bocchi)" width="620"/>
 </p>
 
-> ⚗️ **Ginko-MD-Lab** es la **rama de pruebas y desarrollo** de Ginko-MD. Aquí es donde se crean y prueban comandos nuevos antes de pasarlos al repositorio estable.
+> ⚗️ **Lab2experimental** es el laboratorio activo de Ginko-MD. Aquí se prueban ideas nuevas, mediciones y cambios delicados antes de decidir si pasan al laboratorio intermedio o al repositorio estable.
 >
 > Si buscas la versión lista para usar, ve al repositorio principal 👇
 
