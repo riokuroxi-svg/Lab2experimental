@@ -14,6 +14,18 @@ import os from 'os';
 
 const exec = promisify(execFile);
 const COVER_PATH = path.join(process.cwd(), 'media', 'audio-cover.jpg');
+let ffmpegDisponible = null;
+
+async function hasFfmpeg() {
+  if (ffmpegDisponible !== null) return ffmpegDisponible;
+  try {
+    await exec('ffmpeg', ['-version'], { timeout: 5000 });
+    ffmpegDisponible = true;
+  } catch {
+    ffmpegDisponible = false;
+  }
+  return ffmpegDisponible;
+}
 
 // Verifica si un buffer es un MP3 válido por magic bytes
 export function isMp3Valid(buf) {
@@ -72,7 +84,7 @@ async function remuxConPortada(inputBuffer, safeTitle, artista, coverPath, secon
     fs.writeFileSync(inPath, inputBuffer);
     const hasCover = fs.existsSync(coverPath);
 
-    const args = ['-y', '-i', inPath];
+    const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', inPath];
     if (hasCover) args.push('-i', coverPath);
     args.push('-map', '0:a');
     if (hasCover) {
@@ -117,12 +129,8 @@ async function remuxConPortada(inputBuffer, safeTitle, artista, coverPath, secon
  * Devuelve { buffer, seconds }
  */
 export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Ginko Bot', bitrateKbps = 128, origen = 'api', secondsHint = 0) {
-  // Verificar que ffmpeg está disponible
-  try {
-    await exec('ffmpeg', ['-version'], { timeout: 5000 });
-  } catch {
-    return { buffer: inputBuffer, seconds: 0 };
-  }
+  // Verificar ffmpeg una sola vez por proceso; evita pagar `ffmpeg -version` en cada canción.
+  if (!(await hasFfmpeg())) return { buffer: inputBuffer, seconds: 0 };
 
   const coverPath = await getOptimizedCover();
   const hasCover = fs.existsSync(coverPath);
@@ -142,7 +150,7 @@ export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Gink
   try {
     fs.writeFileSync(inPath, inputBuffer);
 
-    const args = ['-y', '-i', inPath];
+    const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', inPath];
 
     // Agregar la portada como segundo input si existe
     if (hasCover) {
@@ -160,6 +168,7 @@ export async function processMp3ForWhatsApp(inputBuffer, titulo, artista = 'Gink
     args.push(
       '-c:a', 'libmp3lame',
       '-b:a', `${bitrateKbps}k`,
+      '-threads', '0',
       '-ar', '44100',
       '-ac', '2',
       '-id3v2_version', '3',      // ID3v2.3: máxima compatibilidad con Android/iOS/WhatsApp
