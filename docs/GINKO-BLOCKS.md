@@ -1,38 +1,53 @@
 # Ginko Blocks
 
-Plan de trabajo por bloques. La regla es terminar, probar y cerrar un bloque antes de pasar al siguiente.
+Plan oficial de trabajo por bloques. La regla es terminar, probar y cerrar un punto antes de avanzar al siguiente.
 
 ## Estado general
 
 - [x] Bloque 0 — Estabilización del entorno, reglas y README
-- [ ] Bloque 1/11 — Health/stats owner
-- [ ] Bloque 2/11 — Cache manager
-- [ ] Bloque 3/11 — Manejo limpio de errores
-- [ ] Bloque 4/11 — Protección contra saturación
-- [ ] Bloque 5/11 — Optimización extra de `.play`
-- [ ] Bloque 6/11 — Backup/restore para Termux
-- [ ] Bloque 7/11 — Auditoría de dependencias
-- [ ] Bloque 8/11 — Limpieza de comandos muertos o duplicados
-- [ ] Bloque 9/11 — UX, mensajes y menú
-- [ ] Bloque 10/11 — Velocidad de arranque
-- [ ] Bloque 11/11 — Auditoría final y migración limpia
+
+## Bloque A — Resiliencia liviana (sin costo de rendimiento)
+
+- [x] 1. Fijar versión exacta de Baileys/WaSocket en `package.json`.
+- [ ] 2. Auditar y decidir destino de comandos muertos: arreglar, hacer local o eliminar.
+- [ ] 3. `.health` / `.statsbot`: RAM, uptime, errores recientes, estado `yt-dlp`/`ffmpeg`.
+- [ ] 4. Separar errores de usuario vs. errores técnicos internos.
+
+## Bloque B — Cache y saturación
+
+- [ ] 5. `.cache` / `.cache clear` con límites de espacio.
+- [ ] 6. Límite de concurrencia en comandos pesados: imágenes, stickers, APIs lentas y descargas.
+- [ ] 7. Circuit breaker simple para APIs externas que fallen repetidamente.
+
+## Bloque C — Disciplina de repos
+
+- [x] 8. Formalizar regla: `Ginko-MD` solo recibe cambios probados; experimentos se quedan en `Lab2experimental`.
+- [ ] 9. Auditoría de dependencias sin `npm audit fix --force` a ciegas.
+
+## Bloque D — Continuidad
+
+- [ ] 10. Backup/restore de sesión, base de datos y configs privadas para cuando Termux falle.
+
+## Bloque E — Calidad
+
+- [ ] 11. Tests automáticos ampliados para comandos críticos: `.play`, `.mp3`, `.ytsearch`, menú, botones, permisos.
+- [ ] 12. Pulir mensajes de error y UX general.
+- [ ] 13. Revisar tiempo de arranque del bot: imports pesados y cargas innecesarias.
+
+## Bloque F — Opcional, solo si algún día hace falta
+
+- [ ] 14. Copia local `vendor/` del fork de Baileys como respaldo.
+- [ ] 15. Evaluar mover más procesamiento a local en vez de APIs externas, caso por caso.
+
+## Bloque G — Gobernanza del repo
+
+- [ ] 16. Confirmar/definir licencia y enlazarla claramente en README.
+- [ ] 17. Crear `CHANGELOG.md` con historial real de cambios.
 
 ## Regla de enfoque
 
-Si aparece una idea que pertenece a otro bloque, se anota aquí o en urgencias, pero no se mezcla con el bloque actual salvo que sea una emergencia real.
+Si aparece una idea que pertenece a otro bloque, se anota aquí o en `docs/GINKO-URGENT-FIXES.md`, pero no se mezcla con el punto actual salvo que sea una emergencia real.
 
-## Bloque 1/11 — Health/stats owner
+## Punto actual
 
-Objetivo futuro: crear un comando solo owner para revisar salud del bot sin ensuciar consola.
-
-Debe mostrar, como mínimo:
-
-- uptime,
-- uso de RAM,
-- versión de Node,
-- disponibilidad de `yt-dlp`,
-- disponibilidad de `ffmpeg`,
-- tamaño de cache,
-- descargas activas si aplica.
-
-Estado: pendiente.
+Bloque A / punto 2 — auditar y decidir destino de comandos muertos.
