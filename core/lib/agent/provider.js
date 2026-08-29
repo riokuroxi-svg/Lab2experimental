@@ -18,6 +18,7 @@
 
 import { runGuarded } from '#lib/apiBreaker';
 import { userError } from '#lib/errors';
+import { geminiGenerateContents, geminiText, geminiToolCalls } from '#lib/gemini';
 
 function geminiKey() {
   return (
@@ -125,49 +126,31 @@ function translateOpenAiMessages(messages) {
   });
 }
 
-// ── Google Gemini (v1beta generateContent + function calling) ──────
+// ── Google Gemini (vía #lib/gemini): robusto + reintentos ──────────
 async function geminiChat(cfg, { system, messages, tools, temperature, maxTokens }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
   const contents = translateGeminiMessages(messages);
-  const body = {
-    systemInstruction: { parts: [{ text: system }] },
+  const json = await geminiGenerateContents({
+    key: cfg.apiKey,
+    model: cfg.model,
+    system,
     contents,
-    generationConfig: { temperature, maxOutputTokens: maxTokens, candidateCount: 1, thinkingConfig: { thinkingBudget: 0, includeThoughts: false } },
-    safetySettings: [
-      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-    ],
-  };
-  if (tools?.length) {
-    body.tools = [{ functionDeclarations: tools.map((t) => ({
-      name: t.function.name,
-      description: t.function.description,
-      parameters: { type: 'OBJECT', properties: t.function.parameters?.properties || {}, required: t.function.parameters?.required || [] },
-    })) }];
-  }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-  if (!res.ok) {
-    const b = await res.text().catch(() => '');
-    const er = new Error(`Gemini HTTP ${res.status}: ${b.slice(0, 200)}`);
-    er.status = res.status;
-    throw er;
-  }
-  const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts || [];
+    tools,
+    temperature,
+    maxTokens,
+    timeoutMs: 60000,
+    retries: 1,
+    safetyLevel: 'BLOCK_ONLY_HIGH', // el agente debe poder operar tools destructivas (solo owner)
+  });
+  const tool_calls = geminiToolCalls(json);
   let content = '';
-  const tool_calls = [];
-  for (const p of parts) {
-    if (p?.text) content += p.text;
-    if (p?.functionCall) {
-      tool_calls.push({
-        id: `gem_${Date.now()}_${tool_calls.length}`,
-        type: 'function',
-        name: p.functionCall.name,
-        arguments: JSON.stringify(p.functionCall.args || {}),
-      });
+  if (tool_calls.length) {
+    // El modelo puede devolver SOLO function calls (sin texto): no exigir texto.
+    for (const p of (json?.candidates?.[0]?.content?.parts || [])) {
+      if (p?.text && !p?.thought) content += p.text;
     }
+    content = content.trim();
+  } else {
+    content = geminiText(json); // lanza un Error claro (SAFETY, MAX_TOKENS, etc.)
   }
   return { content, tool_calls: normalizeToolCalls(tool_calls), finish_reason: 'stop' };
 }

@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { geminiGenerateContents, geminiText } from '#lib/gemini';
 import FormData from 'form-data';
 
 /**
@@ -16,8 +17,6 @@ import FormData from 'form-data';
 // Memoria por chat: { chatId: [ {role:'user'|'model', text:string} ] }
 const memoria = {};
 const MEM_MAX = 10;
-const URL_GEMINI = (key, model) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
 // Reutilizamos el uploader a litterbox (mismo que .tourl)
 async function subirLitterbox(buffer, mime) {
@@ -41,43 +40,19 @@ async function subirLitterbox(buffer, mime) {
 }
 
 async function geminiPedir(key, model, contents, sysPrompt) {
-  const safetySettings = [
-    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-  ];
-
-  // Inserta system prompt como primer par user/model
-  const arr = [];
-  if (sysPrompt) {
-    arr.push({ role: 'user', parts: [{ text: sysPrompt }] });
-    arr.push({ role: 'model', parts: [{ text: 'Entendido. Seguiré esas instrucciones.' }] });
-  }
-  arr.push(...contents);
-
-  const res = await fetch(URL_GEMINI(key, model), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: arr,
-      safetySettings,
-      generationConfig: { maxOutputTokens: 900, temperature: 0.75 },
-    }),
+  // Usa el helper robusto de #lib/gemini: parsing correcto (no solo parts[0]),
+  // timeout, manejo de finishReason y reintento en 429/5xx.
+  const json = await geminiGenerateContents({
+    key,
+    model,
+    system: sysPrompt || '',
+    contents,
+    temperature: 0.75,
+    maxTokens: 900,
+    timeoutMs: 30000,
+    retries: 1,
   });
-
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { const err = await res.json(); msg = err?.error?.message || msg; } catch (_) {}
-    throw new Error(msg);
-  }
-  const data = await res.json();
-  const blocked = data?.promptFeedback?.blockReason
-    || data?.candidates?.[0]?.finishReason === 'SAFETY';
-  if (blocked) throw new Error('La IA bloqueó esta respuesta por políticas de seguridad.');
-  const resp = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!resp) throw new Error('Gemini no devolvió respuesta.');
-  return resp.trim();
+  return geminiText(json);
 }
 
 export default {

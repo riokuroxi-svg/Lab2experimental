@@ -6,55 +6,26 @@
  * - NUNCA tira excepción: si falla devuelve null para que el llamador use texto fallback.
  */
 
+import { resolveGeminiConfig, geminiGenerateContents, geminiText } from '#lib/gemini';
+
 const GEMINI_ROLE_MAX_TOKENS = 220;
 
-function getKeys() {
-  const key =
-    global.geminiRolKey ||
-    process.env.GEMINI_ROL_KEY ||
-    global.geminiKey ||
-    '';
-  const model =
-    global.geminiRolModel ||
-    process.env.GEMINI_ROL_MODEL ||
-    global.geminiModel ||
-    'gemini-flash-latest';
-  return { key, model };
-}
-
+// Narración/rol: usa el helper robusto de #lib/gemini (parsing + retries).
 async function geminiGenerate(prompt, opts = {}) {
-  const { key, model } = getKeys();
+  const { key, model } = resolveGeminiConfig();
   if (!key) return null;
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const body = {
+    const json = await geminiGenerateContents({
+      key,
+      model,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: opts.temperature ?? 0.9,
-        maxOutputTokens: opts.maxTokens ?? 400,
-        candidateCount: 1,
-        thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
-      },
-      safetySettings: [
-        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-      ],
-    };
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 12000);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
+      temperature: opts.temperature ?? 0.9,
+      maxTokens: opts.maxTokens ?? 400,
+      timeoutMs: 15000,
+      retries: 1,
+      safetyLevel: 'BLOCK_ONLY_HIGH', // conserva la postura original
     });
-    clearTimeout(to);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return text.trim().slice(0, 600) || null;
+    return geminiText(json).slice(0, 600) || null;
   } catch {
     return null;
   }
