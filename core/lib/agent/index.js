@@ -80,25 +80,23 @@ export async function runAgent({ m, text, isOwner = false, pushName = '', sock, 
   mem.add('user', `${m?.sender ? `<${m.sender}> ` : ''}${text}`);
 
   const tools = buildToolSchemas({ isOwner });
-  const messages = [
-    { role: 'system', content: systemFor(isOwner) + `\n\n> Nombre del usuario: ${pushName || 'invitado'}.` },
-    ...mem.historyMessages().filter((x) => x.role !== 'system'),
-  ];
+  const system = systemFor(isOwner) + `\n\n> Nombre del usuario: ${pushName || 'invitado'}.`;
+  const messages = mem.historyMessages().filter((x) => x.role !== 'system');
 
   const ctx = { sock, m, isOwner, pushName, usedPrefix, memory: mem };
   let steps = 0;
 
   while (true) {
-    const assistant = await chatFn({ messages, tools, maxTokens: 1000 });
+    const assistant = await chatFn({ system, messages, tools, maxTokens: 1000 });
 
     if (hasToolCalls(assistant)) {
       mem.add('assistant', '[llamando herramientas]');
-      messages.push({ role: 'assistant', content: assistant.content || null, tool_calls: assistant.tool_calls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) });
+      messages.push({ role: 'assistant', content: assistant.content || null, tool_calls: assistant.tool_calls.map((tc) => ({ id: tc.id, type: 'function', name: tc.name, arguments: tc.arguments })) });
       for (const tc of assistant.tool_calls) {
         let args = {};
         try { args = JSON.parse(tc.arguments || '{}'); } catch { args = {}; }
         const result = await executeTool(tc.name, args, ctx);
-        messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+        messages.push({ role: 'tool', tool_call_id: tc.id, name: tc.name, content: result });
       }
       steps++;
       if (steps >= MAX_ITERATIONS) {
