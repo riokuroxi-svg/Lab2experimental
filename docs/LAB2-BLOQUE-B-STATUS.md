@@ -90,3 +90,23 @@ cd Lab2experimental && git pull && npm install
 .btc bitcoin          # que el breaker no estorba (debe responder normal)
 .health               # ver estado + circuit-breakers
 ```
+
+---
+
+## 🔧 Arreglos tras la prueba en Termux (2026-08-28)
+
+Al probar en Termux salieron dos detalles que se corrigieron:
+
+### 1. `.cache clear all` decía "no eres el owner" (bug)
+**Causa:** en México WhatsApp usa el prefijo `521...` en los JIDs, pero el owner
+estaba guardado como `525574370309` (sin el `1`). La comparación exacta fallaba.
+**Fix:** se creó `isOneOfOwner()` en `core/lib/jidIdentity.js`, que compara
+tolerando `521` ↔ `525`. Se aplicó en `main.js` (owner, root-owner y mods).
+> No da falsos positivos: solo equipara el mismo número con/sin el `1` móvil.
+
+### 2. Los stickers decían "ʏᴜᴋɪ 🧠 Wᴀʙᴏᴛ"
+**Fix:** se reemplazó por `🍁 Ginko-MD` en los 5 sitios donde se definía el
+packname/autor por defecto (`.sticker`, `.brat`, `.bratv`, `.newpack`, `.stickers`).
+Se centralizó en `global.stickerBrand` (en `settings.js`) para un solo punto de cambio.
+> Nota: `api.yuki-wabot.my.id` en settings.js es una API de terceros (no branding),
+> y los "Yuki" de `characters.json` son nombres de personajes del gacha. Se dejaron.

@@ -54,6 +54,10 @@ global.geminiModel = _geminiModel;
 // Nombre predeterminado del bot
 global.botname = "Ginko-MD";
 
+// Marca por defecto para los paquetes/stickers (packname/autor).
+// Se usa en vez del antiguo "Yuki Wabot". Cambia aquí y se refleja en todo.
+global.stickerBrand = "🍁 Ginko-MD";
+
 // Mensajes por defecto
 global.mess = {
   socket: '⚠️ Este comando solo puede ser ejecutado por un sub-bot.',

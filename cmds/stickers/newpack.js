@@ -17,7 +17,7 @@ export default {
       if (packs.find(p => p.name.toLowerCase() === name.toLowerCase())) {
         return msg.reply('《✧》Ya tienes un paquete con ese nombre.')
       }
-      const newPack = { id: Date.now().toString(), lastModified: Date.now().toString(), name, author: 'ʏᴜᴋɪ 🧠 Wᴀʙᴏᴛ', desc: `Paquete de stickers creado por ${dev}`, stickers: [], spackpublic: 0 }
+      const newPack = { id: Date.now().toString(), lastModified: Date.now().toString(), name, author: (global.stickerBrand || '🍁 Ginko-MD'), desc: `Paquete de stickers creado por ${dev}`, stickers: [], spackpublic: 0 }
       packs.push(newPack)
       db.setStickersPack(msg.sender, 'packs', packs)
       msg.reply(`《✧》El paquete de stickers \`${name}\` ha sido creado exitosamente!

@@ -7,6 +7,7 @@ import { getCachedMeta, setCachedMeta, BoundedMap } from '#serialize';
 import db from '#db';
 import { flujoPresencia } from '#lib/humanize';
 import { formatCommandError } from '#lib/errors';
+import { isOneOfOwner } from '#lib/jidIdentity';
 
 const prefixCache = new BoundedMap(300, 0);
 function getBotPrefixRegex(botJid, settings) {
@@ -58,8 +59,8 @@ export default async (sock, msg) => {
   const user = db.getUser(sender);
   const users = db.getChatUser(msg.chat, sender);
   const pushname = msg.pushName || 'Sin nombre';
-  const isOwner = global.owner.map(num => num + '@s.whatsapp.net').includes(sender);
-  const isROwner = [botJid, ...(settings.owner ? [settings.owner] : []), ...global.owner.map(num => num + '@s.whatsapp.net')].includes(sender);
+  const isOwner = isOneOfOwner(sender, global.owner);
+  const isROwner = sender === botJid || isOneOfOwner(sender, settings.owner) || isOneOfOwner(sender, global.owner);
 
   let groupMetadata = null;
   let groupName = '';
@@ -159,7 +160,7 @@ export default async (sock, msg) => {
   // ── Sistema de permisos centralizado (compatible con permisos viejos) ──
   // Soporta tanto los flags viejos (isOwner/isAdmin/botAdmin) como los nuevos
   // declarativos (ownerOnly/modOnly/adminOnly/premiumOnly/groupOnly/privateOnly/botAdmin)
-  const isMod = isOwner || global.mods?.map(n => n + '@s.whatsapp.net')?.includes(sender) || false;
+  const isMod = isOwner || isOneOfOwner(sender, global.mods) || false;
   const isPremium = isMod || user.premium;
   if ((cmdData.isOwner || cmdData.ownerOnly) && !isOwner) {
     if (settings.prefix === 1) return;

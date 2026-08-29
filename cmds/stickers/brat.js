@@ -34,7 +34,7 @@ export default {
       const name = user.name || msg.sender.split('@')[0];
       const hasMeta1 = user.metadatos ? String(user.metadatos).trim() : '';
       const hasMeta2 = user.metadatos2 ? String(user.metadatos2).trim() : '';
-      let texto1 = hasMeta1 ? user.metadatos : 'ʏᴜᴋɪ 🧠 Wᴀʙᴏᴛ';
+      let texto1 = hasMeta1 ? user.metadatos : (global.stickerBrand || '🍁 Ginko-MD');
       let texto2 = hasMeta1 ? (hasMeta2 ? user.metadatos2 : '') : `@${name}`;      
       const buffer = await fetchSticker(text);
       const tmpFile = `./tmp/brat-${Date.now()}.webp`;

@@ -24,7 +24,7 @@ export default {
       const name = user.name;
       const meta1 = user.metadatos ? String(user.metadatos).trim() : '';
       const meta2 = user.metadatos2 ? String(user.metadatos2).trim() : '';
-      let texto1 = meta1 ? meta1 : `ʏᴜᴋɪ 🧠 Wᴀʙᴏᴛ`;
+      let texto1 = meta1 ? meta1 : (global.stickerBrand || '🍁 Ginko-MD');
       let texto2 = meta1 ? (meta2 ? meta2 : '') : `@${name}`;
       let urlArg = null;
       let argsWithoutUrl = [];

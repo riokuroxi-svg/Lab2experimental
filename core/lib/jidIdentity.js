@@ -10,6 +10,24 @@ export function normalizeIdentityJid(raw) {
   return s.toLowerCase();
 }
 
+// Normaliza un número/JID de owner a sus SOLO dígitos canónicos, tolerando el
+// prefijo móvil de país (México: 521... ↔ 525..., para bot = 5255...). Así la
+// comparación de owner no falla por el "1" que WhatsApp añade a los móviles.
+export function normalizeOwnerNumber(raw) {
+  let s = String(raw || '').split('@')[0].replace(/\D/g, '');
+  if (!s) return '';
+  if (/^521\d+$/.test(s)) s = '52' + s.slice(3); // 521xxxxxxxxxx → 525xxxxxxxxx
+  return s;
+}
+
+// ¿El JID del emisor es uno de los números owner/mod? (tolera 521/525 en México).
+export function isOneOfOwner(sender, numbers = []) {
+  const s = normalizeOwnerNumber(sender);
+  if (!s) return false;
+  const list = Array.isArray(numbers) ? numbers : [numbers];
+  return list.some((n) => normalizeOwnerNumber(n) === s);
+}
+
 export function addIdentity(ids, raw) {
   const norm = normalizeIdentityJid(raw);
   if (!norm) return;
