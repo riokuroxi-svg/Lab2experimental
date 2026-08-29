@@ -3,11 +3,6 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import moment from 'moment-timezone';
 import { bodyMenu, menuObject } from '#system/commands';
-import {
-  handleNativeMenuResponse,
-  isNativeMenuResponse,
-  sendNativeCategoryMenu,
-} from '#lib/native-menu';
 import db from '#db';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,45 +41,10 @@ function formatearMs(ms) {
 }
 
 const menuCommand = {
-  command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual', 'menunativo'],
+  command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual'],
   category: 'main',
   description: 'Ver el menú de comandos.',
-  before: async ({ msg, sock }) => {
-    if (!msg?.message || !isNativeMenuResponse(msg)) return;
-
-    const botId = sock?.user?.id ? `${sock.user.id.split(':')[0]}@s.whatsapp.net` : '';
-    const settings = botId ? (db.getSettings(botId) || {}) : {};
-    const configuredPrefix = Array.isArray(settings.prefix)
-      ? (settings.prefix.includes('.') ? '.' : (settings.prefix[0] || '.'))
-      : typeof settings.prefix === 'string'
-        ? (settings.prefix || '.')
-        : settings.prefix === 1
-          ? ''
-          : '.';
-
-    try {
-      await handleNativeMenuResponse({
-        msg,
-        sock,
-        prefix: configuredPrefix,
-        onCategory: (category) => menuCommand.run({
-          msg,
-          sock,
-          args: [category],
-          usedPrefix: configuredPrefix,
-          command: 'menu',
-        }),
-      });
-    } catch (error) {
-      console.error('[NATIVE MENU RESPONSE ERROR]', error);
-      try {
-        await sock.sendMessage(msg.chat, {
-          text: `No pude abrir esa categoría. Usa *${configuredPrefix}menumanual* para ver el menú en texto e imagen.`,
-        }, { quoted: msg });
-      } catch {}
-    }
-  },
-  run: async ({ msg, sock, args, usedPrefix, command }) => {
+  run: async ({ msg, sock, args, usedPrefix }) => {
     try {
       const now = new Date();
       const nowMx = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
@@ -96,7 +56,6 @@ const menuCommand = {
       const botname = botSettings.botname || global.botname || 'Ginko-MD';
       const namebot = botSettings.namebot || botname;
       const owner = botSettings.owner || (global.owner && global.owner[0] ? global.owner[0] + '@s.whatsapp.net' : '');
-      const prefix = botSettings.prefix || usedPrefix;
 
       // Banner local (Bocchi)
       let banner = botSettings.banner || '';
@@ -168,18 +127,6 @@ const menuCommand = {
         menu = menu.replace(new RegExp(`\\${key}`, 'g'), value);
       }
 
-      // El selector nativo (dropdown) es OPCIONAL y NO es el camino por defecto:
-      // en muchos clientes oficiales WhatsApp muestra "mensaje no compatible",
-      // así que .menu usa el menú de texto+banner confiable. El dropdown se
-      // pide con .menunativo, o se reactiva para .menu con GINKO_NATIVE_MENU=1.
-      const nativeEnabled = process.env.GINKO_NATIVE_MENU === '1';
-      const wantNative = command === 'menunativo' || (command === 'menu' && nativeEnabled);
-
-      // Pista de descubrimiento del dropdown (solo en el menú de texto).
-      if (!wantNative) {
-        menu += `\n\n> 💡 Si tu WhatsApp tiene botones nativos, probá *${usedPrefix}menunativo* para el menú desplegable.`;
-      }
-
       const mentioned = [owner, msg.sender].filter(Boolean);
 
       const isGroup = msg.chat.endsWith('@g.us');
@@ -191,21 +138,6 @@ const menuCommand = {
           serverMessageId: 0,
           newsletterName: canalName
         };
-      }
-
-      if (wantNative && !cat) {
-        const nativeBody = `🌸 *${namebot}*\nSelecciona una categoría para ver sus comandos.\n\n> Si tu WhatsApp no muestra el selector, usa *${usedPrefix}menumanual*.`;
-        const nativeResult = await sendNativeCategoryMenu({
-          sock,
-          jid: msg.chat,
-          body: nativeBody,
-          footer: `${namebot} · menú nativo`,
-          title: '🌸 Categorías',
-          quoted: msg,
-          bannerBuffer: banner === LOCAL_BANNER ? getBannerBuffer() : null,
-        });
-        if (nativeResult.sent) return;
-        console.warn('[NATIVE MENU FALLBACK]', nativeResult.error?.message || nativeResult.error || 'error desconocido');
       }
 
       if (banner && (banner === LOCAL_BANNER || fs.existsSync(banner))) {
