@@ -25,6 +25,8 @@ main: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *PRINCIPAL* 𐦯╶͜─ׄ͜
 > Medir el tiempo de respuesta.
 ꕤ *$prefixhealth » $prefixstatsbot*
 > Ver la salud del bot (RAM, uptime, yt-dlp/ffmpeg y errores).
+ꕤ *$prefixcache » $prefixclearcache*
+> Ver y limpiar la caché del bot (temp, yt-dlp, play/mp3).
 ꕤ *$prefixstatus » $prefixestado*
 > Ver el estado del bot.
 ꕤ *$prefixinvite » $prefixinvitar*

@@ -1,11 +1,13 @@
 import axios from 'axios';
 import db from '#db';
+import { withLimit } from '#lib/limits';
 
 export default {
   command: ['imagen', 'img', 'image'],
   category: 'downloads',
   description: 'Buscar y descargar imágenes de Google.',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
+    return withLimit('media', 3, async () => {
     const text = args.join(' ');
     if (!text) {
       return sock.reply(msg.chat, `《✧》 Por favor, Ingrese un término de búsqueda.`, msg);
@@ -31,6 +33,7 @@ export default {
     } catch (e) {
       await msg.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*. Please try again or contact support if the issue persists.\n> [Error: *${e.message}*]`);
     }
+    })
   }
 };
 

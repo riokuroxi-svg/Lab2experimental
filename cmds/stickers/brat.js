@@ -1,12 +1,13 @@
 import axios from 'axios';
 import fs from 'fs';
 import db from '#db';
+import { runGuarded } from '#lib/apiBreaker';
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const fetchSticker = async (text, attempt = 1) => {
   try {
-    const response = await axios.get(`https://skyzxu-brat.hf.space/brat`, { params: { text }, responseType: 'arraybuffer' });
+    const response = await runGuarded('brat', async () => axios.get(`https://skyzxu-brat.hf.space/brat`, { params: { text }, responseType: 'arraybuffer' }));
     return response.data;
   } catch (error) {
     if (error.response?.status === 429 && attempt <= 3) {

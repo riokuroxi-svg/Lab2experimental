@@ -9,15 +9,15 @@ Plan oficial de trabajo por bloques. La regla es terminar, probar y cerrar un pu
 ## Bloque A — Resiliencia liviana (sin costo de rendimiento)
 
 - [x] 1. Fijar versión exacta de Baileys/WaSocket en `package.json`.
-- [ ] 2. Auditar y decidir destino de comandos muertos: arreglar, hacer local o eliminar.
-- [ ] 3. `.health` / `.statsbot`: RAM, uptime, errores recientes, estado `yt-dlp`/`ffmpeg`.
-- [ ] 4. Separar errores de usuario vs. errores técnicos internos.
+- [x] 2. Auditar y decidir destino de comandos muertos: arreglar, hacer local o eliminar.
+- [x] 3. `.health` / `.statsbot`: RAM, uptime, errores recientes, estado `yt-dlp`/`ffmpeg`.
+- [x] 4. Separar errores de usuario vs. errores técnicos internos.
 
 ## Bloque B — Cache y saturación
 
-- [ ] 5. `.cache` / `.cache clear` con límites de espacio.
-- [ ] 6. Límite de concurrencia en comandos pesados: imágenes, stickers, APIs lentas y descargas.
-- [ ] 7. Circuit breaker simple para APIs externas que fallen repetidamente.
+- [x] 5. `.cache` / `.cache clear` con límites de espacio.
+- [x] 6. Límite de concurrencia en comandos pesados: imágenes, stickers, APIs lentas y descargas.
+- [x] 7. Circuit breaker simple para APIs externas que fallen repetidamente.
 
 ## Bloque C — Disciplina de repos
 
@@ -50,4 +50,6 @@ Si aparece una idea que pertenece a otro bloque, se anota aquí o en `docs/GINKO
 
 ## Punto actual
 
-Bloque A / punto 2 — auditar y decidir destino de comandos muertos.
+Bloques A y B completados en Lab2 — pendiente de **prueba en Termux** y visto bueno del usuario antes de migrar a `Ginko-MD`.
+
+> Detalles: `docs/LAB2-BLOQUE-A-STATUS.md` (A) y `docs/LAB2-BLOQUE-B-STATUS.md` (B).

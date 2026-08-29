@@ -1,6 +1,8 @@
 /**
  * .deezer <búsqueda o enlace>  →  busca música en Deezer y envía preview (30s) + info del track.
  */
+import { runGuarded } from '#lib/apiBreaker';
+
 export default {
   command: ['deezer', 'dzr', 'deezermusic'],
   category: 'downloads',
@@ -11,7 +13,7 @@ export default {
       await msg.react('🎧');
       // Buscar
       const url = `https://api.deezer.com/search?q=${encodeURIComponent(text)}&limit=1`;
-      const res = await fetch(url);
+      const res = await runGuarded('deezer', async () => fetch(url));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const track = data?.data?.[0];

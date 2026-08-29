@@ -13,6 +13,7 @@ import {
   formatUptime,
   truncateError,
 } from '#lib/diagnostics';
+import { getBreakerStatus, resetBreaker } from '#lib/apiBreaker';
 
 // El recorder de errores se registra una sola vez. Inofensivo y aditivo.
 installPassiveErrorRecorder();
@@ -48,6 +49,14 @@ export default {
         }
         clearBotErrors();
         return msg.reply('> ✅ Historial de errores recientes restablecido.');
+      }
+      // Subcomando para reactivar los circuit-breakers (solo owner)
+      if (sub === 'breaker' && (msg.text || '').split(/\s+/)[2]?.toLowerCase() === 'reset') {
+        if (!isOwner) {
+          return msg.reply('> *Health breaker reset* solo puede usarlo el *creador/owner* del bot.');
+        }
+        resetBreaker();
+        return msg.reply('> ✅ Circuit-breakers restablecidos. Los servicios volverán a intentarse.');
       }
 
       const botId = sock?.user?.id ? `${sock.user.id.split(':')[0]}@s.whatsapp.net` : '';
@@ -105,6 +114,24 @@ export default {
       if (isOwner) {
         lines.push('', `❖ Errores recientes (${errCount}):`);
         lines.push(...(errLines.length ? errLines : ['▸ (sin errores registrados)']));
+
+        // Estado de los circuit-breakers de APIs externas
+        const breakers = getBreakerStatus();
+        lines.push('', `⬢ Circuit-breaker (APIs externas):`);
+        if (breakers.length) {
+          for (const b of breakers) {
+            const st = b.state === 'open' ? '🟥 PAUSADO'
+              : b.state === 'half-open' ? '🟨 SONDEANDO'
+              : '🟢 OK';
+            const extra = b.state === 'open' && b.retryInMs > 0
+              ? ` · reintenta en ${Math.ceil(b.retryInMs / 1000)}s`
+              : '';
+            lines.push(`▸ *${b.service}* › ${st} (${b.failures} fallo${b.failures === 1 ? '' : 's'})${extra}`);
+          }
+          lines.push(`> Resetear todos: *${usedPrefix}health breaker reset*`);
+        } else {
+          lines.push('▸ (sin servicios monitoreados aún)');
+        }
       } else {
         lines.push('', `❖ Errores recientes › ${errCount}`);
       }

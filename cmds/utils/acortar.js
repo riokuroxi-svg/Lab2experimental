@@ -1,6 +1,8 @@
 /**
  * .acortar <url>  →  acorta una URL con TinyURL.
  */
+import { runGuarded } from '#lib/apiBreaker';
+
 export default {
   command: ['acortar', 'shorturl', 'shorten', 'acorta'],
   category: 'utils',
@@ -17,7 +19,7 @@ export default {
       return msg.reply(`《✧》 El texto no parece un enlace válido (debe empezar con http:// o https://).`);
     }
     try {
-      const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+      const res = await runGuarded('tinyurl', async () => fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`));
       const short = (await res.text()).trim();
       if (!res.ok || !short.startsWith('http')) {
         return msg.reply(`《✧》 No se pudo acortar el enlace. Intenta más tarde.`);

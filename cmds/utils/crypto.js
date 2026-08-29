@@ -2,6 +2,8 @@
  * .btc / .crypto [moneda]  →  precio de criptomonedas en USD y MXN (CoinGecko).
  * Por defecto: bitcoin, ethereum, solana.
  */
+import { runGuarded } from '#lib/apiBreaker';
+
 const PREDETERMINADOS = ['bitcoin', 'ethereum', 'solana'];
 const ALIAS = {
   btc: 'bitcoin', bitcoin: 'bitcoin',
@@ -27,7 +29,7 @@ export default {
     }
     try {
       const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd,mxn`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+      const res = await runGuarded('coingecko', async () => fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } }));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data || Object.keys(data).length === 0) {

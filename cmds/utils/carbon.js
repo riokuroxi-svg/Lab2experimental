@@ -2,6 +2,8 @@
  * .carbon  (citando un mensaje con código o con texto) → imagen bonita de código (estilo carbon.now.sh).
  * Usa carbonara.solopov.dev, API gratuita sin key.
  */
+import { runGuarded } from '#lib/apiBreaker';
+
 const TEMAS = {
   verde: '#1F816D',
   negro: '#0f172a',
@@ -34,11 +36,11 @@ export default {
     const statusMsg = await sock.sendMessage(msg.chat, { text: '🎨 *Carbon* generando imagen...' }, { quoted: msg }).catch(() => null);
     try {
       const body = { code: codigo, backgroundColor: color || '#1F816D' };
-      const res = await fetch('https://carbonara.solopov.dev/api/cook', {
+      const res = await runGuarded('carbon', async () => fetch('https://carbonara.solopov.dev/api/cook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
+      }));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length < 500) throw new Error('Imagen vacía.');

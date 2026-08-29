@@ -4,6 +4,7 @@ import { promises as fsp } from 'fs'
 import os from 'os'
 import path from 'path'
 import { spawn } from 'child_process'
+import { withLimit } from '#lib/limits'
 
 const fetchFn = fetch
 
@@ -12,6 +13,7 @@ export default {
   category: 'utils',
   description: 'Mejorar la calidad de una imagen.',
   run: async ({ msg, sock, args, usedPrefix, command, text }) => {
+    return withLimit('api', 2, async () => {
     try {
       const q = msg.quoted || msg
       const mime = q?.mimetype || q?.msg?.mimetype || ''
@@ -36,6 +38,7 @@ export default {
       console.error(e)
       await msg.reply(`> Ocurrió un error inesperado ejecutando *${usedPrefix + command}*.\n> [Error: *${e?.message || String(e)}*]`)
     }
+    })
   }
 }
 
