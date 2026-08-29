@@ -46,7 +46,7 @@ function formatearMs(ms) {
 }
 
 const menuCommand = {
-  command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual'],
+  command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual', 'menunativo'],
   category: 'main',
   description: 'Ver el menú de comandos.',
   before: async ({ msg, sock }) => {
@@ -168,6 +168,11 @@ const menuCommand = {
         menu = menu.replace(new RegExp(`\\${key}`, 'g'), value);
       }
 
+      // Pista de descubrimiento del dropdown (solo en el menú de texto).
+      if (!wantNative) {
+        menu += `\n\n> 💡 Si tu WhatsApp tiene botones nativos, probá *${usedPrefix}menunativo* para el menú desplegable.`;
+      }
+
       const mentioned = [owner, msg.sender].filter(Boolean);
 
       const isGroup = msg.chat.endsWith('@g.us');
@@ -181,10 +186,13 @@ const menuCommand = {
         };
       }
 
-      // .menu sin categoría usa el selector nativo. El banner local se prepara
-      // como header multimedia; si la serialización, la subida o el relay
-      // fallan, se continúa por la ruta manual de abajo sin perder la imagen.
-      if (command === 'menu' && !cat) {
+      // El selector nativo (dropdown) es OPCIONAL y NO es el camino por defecto:
+      // en muchos clientes oficiales WhatsApp muestra "mensaje no compatible",
+      // así que .menu usa el menú de texto+banner confiable. El dropdown se
+      // pide con .menunativo, o se reactiva para .menu con GINKO_NATIVE_MENU=1.
+      const nativeEnabled = process.env.GINKO_NATIVE_MENU === '1';
+      const wantNative = command === 'menunativo' || (command === 'menu' && nativeEnabled);
+      if (wantNative && !cat) {
         const nativeBody = `🌸 *${namebot}*\nSelecciona una categoría para ver sus comandos.\n\n> Si tu WhatsApp no muestra el selector, usa *${usedPrefix}menumanual*.`;
         const nativeResult = await sendNativeCategoryMenu({
           sock,
