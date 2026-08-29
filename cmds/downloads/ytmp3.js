@@ -317,8 +317,13 @@ function precalentarAudio(job) {
 // ════════════════════════════════════════════════════════════
 //  DESCARGA POR API (fallback)
 // ════════════════════════════════════════════════════════════
+// URL y key configurables por .env para no depender de una key hardcodeada
+// (la del fork suele vencer → 401). Default → api.lempi.lat.
+const API_FALLBACK_URL = (process.env.YTDLP_API_URL || 'https://api.lempi.lat').replace(/\/$/, '')
+const API_FALLBACK_KEY = process.env.YTDLP_API_KEY || process.env.LEMPI_KEY || 'montekey28'
+
 async function getAudioFromApi(url) {
-  const apiUrl = `https://api.lempi.lat/dl/yta?url=${encodeURIComponent(url)}&apikey=montekey28`
+  const apiUrl = `${API_FALLBACK_URL}/dl/yta?url=${encodeURIComponent(url)}&apikey=${API_FALLBACK_KEY}`
   const res = await fastFetch(apiUrl, { timeout: 15000 })
   if (!res.ok) throw new Error(`API HTTP ${res.status}`)
   const json = await res.json()
@@ -331,7 +336,7 @@ async function getAudioFromApi(url) {
 }
 
 async function getVideoFromApi(url) {
-  const apiUrl = `https://api.lempi.lat/dl/ytv?url=${encodeURIComponent(url)}&apikey=montekey28`
+  const apiUrl = `${API_FALLBACK_URL}/dl/ytv?url=${encodeURIComponent(url)}&apikey=${API_FALLBACK_KEY}`
   const res = await fastFetch(apiUrl, { timeout: 18000, headers: { 'user-agent': 'Mozilla/5.0' } })
   if (!res.ok) throw new Error(`API HTTP ${res.status}`)
   const json = await res.json()

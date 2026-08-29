@@ -8,7 +8,8 @@
     "format": "prettier --write .",
     "start": "node index.js",
     "test:native-menu": "node --test test/native-menu.test.mjs",
-    "test:lab2-fixes": "node --test test/lab2-mining-code.test.mjs test/lab2-benchdl.test.mjs"
+    "test:lab2-fixes": "node --test test/lab2-mining-code.test.mjs test/lab2-benchdl.test.mjs",
+    "preinstall": "node -e \"require('fs').existsSync('scripts/ensure-git-https.cjs')&&require('./scripts/ensure-git-https.cjs')\""
   },
   "imports": {
     "#serialize": "./core/serialize.js",
@@ -64,5 +65,8 @@
     "readline-sync": "^1.4.10",
     "syntax-error": "^1.4.0",
     "ws": "^8.21.3"
+  },
+  "overrides": {
+    "libsignal": "npm:libsignal@6.0.0"
   }
 }

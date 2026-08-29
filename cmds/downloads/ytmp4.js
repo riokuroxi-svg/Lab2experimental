@@ -213,8 +213,11 @@ async function getYoutubeUrl(input) {
 }
 
 // ── Fallback a API externa (lempi) ──────────────────────────
-const api_url = 'https://api.lempi.lat/dl/ytv?url='
-const api_key = 'montekey28'
+// URL y key configurables por .env para no depender de una key hardcodeada
+// que puede vencer/rate-limitearse. Default → api.lempi.lat (la key del fork
+// original suele caducar; configura YTDLP_API_KEY/LEMPI_KEY o usa yt-dlp local).
+const api_url = (process.env.YTDLP_API_URL || 'https://api.lempi.lat').replace(/\/$/, '') + '/dl/ytv?url='
+const api_key = process.env.YTDLP_API_KEY || process.env.LEMPI_KEY || 'montekey28'
 const max_video_size = 50 * 1024 * 1024
 
 async function getFareVideo(url) {

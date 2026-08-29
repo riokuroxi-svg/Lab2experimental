@@ -32,7 +32,7 @@ global.APIs = {
   delirius: { url: "https://api.delirius.store", key: null },
   zenzxz: { url: "https://api.zenzxz.my.id", key: null },
   siputzx: { url: "https://app.siputzx.my.id", key: null },
-  Ginko: { url: "https://api.lempi.lat", key: "montekey28" }
+  Ginko: { url: process.env.LEMPI_URL || "https://api.lempi.lat", key: process.env.LEMPI_KEY || "montekey28" }
 };
 
 // Google Gemini (IA)
