@@ -77,20 +77,17 @@ El bot está **mucho más sano** de lo que sugería la auditoría vieja. Ya no h
 
 ---
 
-## ❌ Lo que realmente está ROTO hoy (4 comandos)
+## ❌ Lo que estaba ROTO (4 comandos) → Resuelto 2026-08-28 ✅
 
-1. **`.mp4` / `.play2`** — lempi (key inválida, 401). → **Arreglar con yt-dlp local.**
-2. **`.qc`** — bot.lyo.su (SSL 526). → **Buscar API alternativa.**
-3. **`.twitter`** — los 3 backends caídos. → **Reemplazar o eliminar.**
-4. **`.imagen`** — lempi 404 + delirius timeout. → **Cambiar fuente de imágenes.**
+1. **`.mp4` / `.play2`** — lempi (key inválida, 401). → **✅ Arreglado:** ahora usa **yt-dlp local** (fallback a API).
+2. **`.imagen`** — lempi 404 + delirius timeout. → **✅ Arreglado:** ahora usa **Bing Images local** (scrapeo sin key).
+3. **`.qc`** — bot.lyo.su (SSL 526). → **🟡 Desactivado con aviso claro** (sin API estable). Reinicio fácil cuando haya API.
+4. **`.twitter`** — los 3 backends caídos. → **🟡 Desactivado con aviso claro** (sin servidor estable). Reinicio fácil cuando haya servidor.
 
-## 🎯 Orden de arreglo recomendado (NO ejecutado aún)
+## 🎯 Frágiles pendientes (probar en Termux y decidir uno por uno)
 
-1. **`.mp4` / `.play2`** → lo más usado y el arreglo es copiar el enfoque de `.mp3` (yt-dlp local). Alto impacto.
-2. **`.imagen`** → muy usado; cambiar a una fuente de imágenes viva.
-3. **`.qc`** → API alternativa para quote sticker.
-4. **`.twitter`** → probar otras APIs o retirar.
-5. **Frágiles** (`.facebook`, `.instagram`, `.mediafire`, `.gdrive`, `.hd`) → probarlos en Termux y decidir uno por uno.
+- `.facebook`, `.instagram`, `.mediafire`, `.gdrive`, `.hd`, `.ai` (imágenes).
+  Estos dependen de scraping/APIs flojas → **se prueban en Termux** antes de decidir.
 
 > Todos estos cambios se harán **en Lab2**, con checkpoint, y **no pasan a Ginko-MD** hasta que los apruebes tras probarlos en Termux.
 

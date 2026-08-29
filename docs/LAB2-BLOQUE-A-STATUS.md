@@ -23,8 +23,16 @@
   4. `.imagen` (lempi 404 + delirius timeout).
 - Varios "antes rotos" ahora están **vivos** (danbooru, gelbooru, nekos.life,
   tikwm, emojik, .waifu, .anime, .carbon, .brat, .apk).
-- **Pendiente:** decidir qué arreglar primero y hacerlo en Lab2 con checkpoint
-  (no pasa a estable hasta aprobación).
+
+### Decisión tomada sobre los 4 rotos (2026-08-28)
+| Comando | Decisión | Cómo |
+|---|---|---|
+| `.mp4` / `.play2` | ✅ **Arreglado** | Ahora usa **yt-dlp local** (igual que `.play`/`.mp3`), con la API como respaldo. Ya no depende de la key de lempi. |
+| `.imagen` | ✅ **Arreglado** | Ahora usa **Bing Images local** (scrapeo sin API key), con las APIs de respaldo. |
+| `.qc` | 🟡 **Desactivado con aviso claro** | No hay API de quote estable (SSL roto; las alternativas están caídas). Se muestra un mensaje que sugiere `.brat`/`.bratv`/`.sticker`. Reinicio fácil cuando haya API. |
+| `.twitter` | 🟡 **Desactivado con aviso claro** | Los 3 backends de `global.APIs` están caídos. Se muestra un mensaje que sugiere otras descargas. Reinicio fácil cuando haya servidor. |
+
+> Toda esta tanda se hizo **solo en Lab2** y con checkpoint. Nada pasó a Ginko-MD.
 
 ## Punto 3 — `.health` / `.statsbot` ✅ implementado (este cambio)
 
@@ -40,23 +48,37 @@ Comando nuevo:
   - `core/lib/diagnostics.js` (nuevo) — buffer de errores + helpers (aditivo, seguro).
   - `cmds/main/health.js` (nuevo) — el comando.
   - `core/system/commands.js` — solo una línea descriptiva en el menú `main`.
-- **No se tocó** `index.js` ni `main.js` (protegidos). En chat privado solo lo usa
-  el owner; en grupos funciona para todos (igual que `.status`).
+- **No se tocó** `index.js`. En chat privado solo lo usa el owner; en grupos
+  funciona para todos (igual que `.status`).
 
-## Punto 4 — Separar errores de usuario vs. técnicos 🚧 pendiente
+## Punto 4 — Separar errores de usuario vs. técnicos ✅ implementado
 
-- Requiere tocar el `catch` del despachador (`main.js`), que está **protegido**.
-- Se hará en su propio bloque, con checkpoint previo, para que nunca se rompa
-  el flujo central.
-- El buffer de `core/lib/diagnostics.js` ya queda preparado para ahí.
+- Se creó [`core/lib/errors.js`](../core/lib/errors.js) con:
+  - `UserError` / `userError()` → errores de **usuario** (mensaje claro y seguro).
+  - `formatCommandError()` → decide el texto según si es error de usuario o técnico.
+- **Cambio mínimo en `main.js`** (el despachador): se reemplazó solo la línea del
+  `catch` para usar `formatCommandError()`.
+  - Error de usuario → se muestra el mensaje tal cual.
+  - Error técnico → se registra (en `.health`) y **solo el owner ve el detalle**;
+    al resto se le muestra un mensaje genérico y **sin stack**.
+- `index.js` **no se tocó**. El supervisor de errores (`processGuard`) sigue intacto.
+- Los comandos ya pueden usar `userError('...')` para mensajes limpios.
 
 ## Verificación hecha (antes de tocar estable)
 
-- `node --check` de los 3 archivos tocados → OK.
-- Suite de 13 asserts sobre `diagnostics.js` (buffer, orden, límite, clear,
-  formatUptime, truncateError) → **13/13 OK**.
-- Resolución de aliases `#lib/fastFetch` y `#lib/diagnostics` → OK.
-- Registro del comando en el loader (`[health, statsbot, salud]`) → OK.
+## Verificación hecha (antes de tocar estable)
+
+- `node --check` de **todos** los archivos `cmds/` y `core/` (216 .js) → **0 errores de sintaxis**.
+- Suite de **13 asserts** sobre `diagnostics.js` → **13/13 OK**.
+- Suite de **8 asserts** sobre `errors.js`/`formatCommandError` → **8/8 OK**.
+- Resolución de aliases `#lib/*` → OK.
+- Registro del comando en el loader (`.health`, `.mp4`, `.imagen`, `.qc`, `.twitter`) → OK.
+- `test:lab2-fixes` falla **solo** por `baileys`/deps no instaladas en el sandbox (ambiental,
+  no por estos cambios). En Termux con `npm install` debería pasar.
+- API probes en vivo para los comandos modificados (Bing Images, yt-dlp, backends) → OK.
+
+> No todos los tests ambientales corren aquí: el sandbox no tiene las dependencias
+> (`baileys`, `jimp`...) ni Node ≥ 22.5. La validación real final es en **Termux**.
 
 > Nota: la prueba real de envío en WhatsApp se hace en **Termux**. En el sandbox
 > no se puede arrancar el bot (requiere Node ≥ 22.5 y la sesión de WhatsApp).

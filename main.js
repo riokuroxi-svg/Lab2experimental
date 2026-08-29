@@ -6,6 +6,7 @@ import path from 'path';
 import { getCachedMeta, setCachedMeta, BoundedMap } from '#serialize';
 import db from '#db';
 import { flujoPresencia } from '#lib/humanize';
+import { formatCommandError } from '#lib/errors';
 
 const prefixCache = new BoundedMap(300, 0);
 function getBotPrefixRegex(botJid, settings) {
@@ -210,6 +211,9 @@ export default async (sock, msg) => {
     // (como quien escribe) → ejecutar → paused. Configurable en .env.
     await flujoPresencia(sock, msg.chat, () => cmdData.run({ msg, sock, args, usedPrefix, command, text, groupMetadata, participants, isAdmins, isBotAdmins, isOwner, __dirname: global.plugins[cmdData.pluginKey]?.dirname }));
   } catch (error) {
-    await sock.sendMessage(msg.chat, { text: `《✧》 Error al ejecutar el comando ${command}.\n\n${error}` }, { quoted: msg });
+    // Separa errores de USUARIO (mensaje claro) vs TÉCNICOS (resumen sin
+    // filtrar stacks al resto; el owner sí ve el detalle). Ver core/lib/errors.js.
+    const errorText = formatCommandError(error, command, { isOwner });
+    await sock.sendMessage(msg.chat, { text: errorText }, { quoted: msg });
   }
 };
