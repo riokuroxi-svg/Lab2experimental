@@ -27,6 +27,8 @@ main: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *PRINCIPAL* 𐦯╶͜─ׄ͜
 > Ver la salud del bot (RAM, uptime, yt-dlp/ffmpeg y errores).
 ꕤ *$prefixcache » $prefixclearcache*
 > Ver y limpiar la caché del bot (temp, yt-dlp, play/mp3).
+ꕤ *$prefixginko » $prefixagente » $prefixai*
+> Agente IA autónomo (OpenRouter). Usa herramientas y diagnostica el bot.
 ꕤ *$prefixstatus » $prefixestado*
 > Ver el estado del bot.
 ꕤ *$prefixinvite » $prefixinvitar*

@@ -16,6 +16,9 @@
     "#core/*": "./core/*.js",
     "#system/*": "./core/system/*.js",
     "#lib/*": "./core/lib/*.js",
+    "#agent": "./core/lib/agent/index.js",
+    "#agenttools": "./core/lib/agent/tools.js",
+    "#agentprovider": "./core/lib/agent/provider.js",
     "#events": "./cmds/events.js",
     "#db": "./core/system/database.js"
   },
