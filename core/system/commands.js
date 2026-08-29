@@ -23,6 +23,8 @@ main: `╭┈ࠢ͜─ׄ֟፝͜─ׄ͜─ׄ͜╴𐔌 *PRINCIPAL* 𐦯╶͜─ׄ͜
 > Ver información del bot.
 ꕤ *$prefixping » $prefixp*
 > Medir el tiempo de respuesta.
+ꕤ *$prefixhealth » $prefixstatsbot*
+> Ver la salud del bot (RAM, uptime, yt-dlp/ffmpeg y errores).
 ꕤ *$prefixstatus » $prefixestado*
 > Ver el estado del bot.
 ꕤ *$prefixinvite » $prefixinvitar*
