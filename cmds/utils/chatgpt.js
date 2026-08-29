@@ -56,7 +56,7 @@ async function geminiPedir(key, model, contents, sysPrompt) {
 }
 
 export default {
-  command: ['ai', 'ia', 'chatgpt', 'gemini', 'chat'],
+  command: ['ia', 'chatgpt', 'gemini', 'chat'],
   category: 'utils',
   description: 'Chatear con la IA (Gemini) con memoria.',
   run: async ({ msg, sock, args, usedPrefix, command, text }) => {
