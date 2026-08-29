@@ -7,6 +7,71 @@ const DEFAULT_BANNER = path.resolve(process.cwd(), 'media', 'code-banner.jpg');
 const DEFAULT_FALLBACK_IMAGE = path.resolve(process.cwd(), 'media', 'menu.jpg');
 const LINK_PREVIEW_FALLBACK_IMAGE = path.resolve(process.cwd(), 'assets', 'link-preview-fallback.jpg');
 
+// ── Mitigación de SSRF (CVE-2026-43897 en link-preview-js vía baileys) ──
+// link-preview-js (<=4.0.0) no bloquea peticiones a IPs privadas/loopback ni
+// DNS que resuelva a IPs internas. Como lo llamamos por "getUrlInfo" para
+// previews de enlaces que manda un usuario, validamos el host ANTES de
+// fetchear: si apunta a una IP privada/loopback (v4 o v6) o un dominio que
+// resuelve a una IP interna, lo rechazamos. Así el bot no puede usarse como
+// puerta a la red interna (SSRF). Es aditivo y no cambia el comportamiento
+// para URLs normales.
+import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
+
+function isPrivateIp(ip) {
+  // IPv4
+  if (ip.includes('.')) {
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) || // link-local
+      a === 0 // 0.0.0.0/8
+    );
+  }
+  // IPv6 (incluye loopback ::1, unique-local fc00::/7, link-local fe80::/10,
+  // IPv4-mapped ::ffff:127.0.0.1, y varios rangos reservados)
+  const v = ip.toLowerCase();
+  if (v === '::1' || v === '::') return true;
+  if (v.startsWith('fc') || v.startsWith('fd')) return true; // fc00::/7
+  if (v.startsWith('fe80')) return true; // link-local
+  if (v.startsWith('::ffff:')) {
+    const mapped = v.split('::ffff:')[1];
+    return isPrivateIp(mapped || '');
+  }
+  // Cualquier IPv6 que no sea global unicast razonable → bloqueamos por
+  // prudencia (los rangos reservados/embebidos son demasiados para listar).
+  // Los hosts legítimos públicos suelen ir por DNS/A/AAAA en 2000::/3.
+  return false;
+}
+
+async function hostIsInternallyReachable(hostname) {
+  if (!hostname) return false;
+  // Dirección literal en el hostname (IPv4 o IPv6 en corchetes)
+  if (isIP(hostname)) return isPrivateIp(hostname);
+  // Además, resolver por DNS y comprobar si el host cae en una IP interna.
+  try {
+    const addresses = await lookup(hostname, { all: true });
+    return addresses.some((a) => isPrivateIp(a.address));
+  } catch {
+    return false; // si no se puede resolver, no lo marcamos como privado
+  }
+}
+
+async function assertSafeUrl(normalizedUrl) {
+  const u = new URL(normalizedUrl);
+  let host = u.hostname;
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // IPv6 en corchetes
+  const reachable = await hostIsInternallyReachable(host);
+  if (reachable) {
+    throw new Error('URL bloqueada por seguridad: apunta a una dirección interna o de loopback.');
+  }
+}
+
 export function richUiEnabled() {
   return String(process.env.GINKO_RICH_UI || 'on').toLowerCase() !== 'off';
 }
@@ -147,6 +212,7 @@ export async function generateStandardLinkPreview({ sock, url, text, highQuality
     'pragma': 'no-cache',
   };
   try {
+    await assertSafeUrl(normalizedUrl);
     const preview = await getUrlInfo(normalizedUrl, {
       thumbnailWidth: 192,
       fetchOpts: {

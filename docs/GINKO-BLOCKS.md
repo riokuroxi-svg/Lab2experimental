@@ -22,7 +22,7 @@ Plan oficial de trabajo por bloques. La regla es terminar, probar y cerrar un pu
 ## Bloque C — Disciplina de repos
 
 - [x] 8. Formalizar regla: `Ginko-MD` solo recibe cambios probados; experimentos se quedan en `Lab2experimental`.
-- [ ] 9. Auditoría de dependencias sin `npm audit fix --force` a ciegas.
+- [x] 9. Auditoría de dependencias sin `npm audit fix --force` a ciegas.
 
 ## Bloque D — Continuidad
 
