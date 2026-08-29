@@ -9,16 +9,22 @@
   `github:this-xys/WaSocket#41ce95870eb3c78d038ad9055705d270052cdfe2`.
 - No hay `"latest"` suelto en Baileys. **No requiere trabajo.**
 
-## Punto 2 — Auditar comandos muertos 🚧 en curso
+## Punto 2 — Auditar comandos muertos ✅ (re-auditoría hecha)
 
-- La auditoría de `audit/REPORTE-AUDITORIA.md` es del **2026-08-12** (base vieja).
-  Desde entonces el bot migró `.play`/`.mp3` a **yt-dlp local**, así que esa lista
-  está desactualizada: varios "rotos" ya no dependen de la API muerta.
-- Inventario real actual (generado el 2026-08-28): **192 archivos** en `cmds/`,
-  **186 con `run`** y 6 que son *hooks/tareas de fondo* (antilink, antistatus,
-  events, level, gachareserved, afktime) — NO son comandos muertos.
-- **Siguiente paso:** re-verificar contra el código actual cuáles siguen rotos
-  (APIs externas caídas) y decidir: arreglar / hacer local / eliminar.
+- Resultado completo en [`docs/LAB2-AUDITORIA-COMANDOS.md`](LAB2-AUDITORIA-COMANDOS.md).
+  Re-análisis a live **contra el código actual** (la auditoría vieja quedó obsoleta).
+- Inventario real actual (2026-08-28): **192 archivos** en `cmds/`, **186 con `run`**
+  y 6 que son *hooks/tareas de fondo* (antilink, antistatus, events, level,
+  gachareserved, afktime) — NO son comandos muertos.
+- **Conclusión:** ya NO hay 36 rotos. Hoy el problema real se reduce a **4 comandos**:
+  1. `.mp4`/`.play2` (lempi 401).
+  2. `.qc` (SSL 526).
+  3. `.twitter` (los 3 backends caídos).
+  4. `.imagen` (lempi 404 + delirius timeout).
+- Varios "antes rotos" ahora están **vivos** (danbooru, gelbooru, nekos.life,
+  tikwm, emojik, .waifu, .anime, .carbon, .brat, .apk).
+- **Pendiente:** decidir qué arreglar primero y hacerlo en Lab2 con checkpoint
+  (no pasa a estable hasta aprobación).
 
 ## Punto 3 — `.health` / `.statsbot` ✅ implementado (este cambio)
 
