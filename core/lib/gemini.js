@@ -62,7 +62,6 @@ export async function geminiGenerateContents({
   maxTokens = 900,
   timeoutMs = 30000,
   retries = 1,
-  includeThinking = false,
   safetyLevel = 'BLOCK_MEDIUM_AND_ABOVE',
 } = {}) {
   const url = `${BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
@@ -75,7 +74,15 @@ export async function geminiGenerateContents({
 
   const body = {
     contents: arr,
-    generationConfig: { temperature, maxOutputTokens: maxTokens, candidateCount: 1 },
+    generationConfig: {
+      temperature,
+      maxOutputTokens: maxTokens,
+      candidateCount: 1,
+      // Deshabilitamos el "thinking" de Gemini 3.x: con presupuesto bajo, el
+      // thinking se come todo maxOutputTokens y devuelve MAX_TOKENS sin texto
+      // final (el fallo intermitente "a veces falla"). Los tokens van al texto.
+      thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
+    },
     safetySettings: SAFETY.map((s) => ({ ...s, threshold: safetyLevel })),
   };
   if (tools?.length) {
@@ -85,34 +92,32 @@ export async function geminiGenerateContents({
       parameters: { type: 'OBJECT', properties: t.function.parameters?.properties || {}, required: t.function.parameters?.required || [] },
     })) }];
   }
-  if (includeThinking) body.generationConfig.thinkingConfig = { thinkingBudget: 0, includeThoughts: false };
-
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), timeoutMs);
   let lastError = null;
-  try {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal });
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          const err = new Error(extractError(res.status, text));
-          err.status = res.status;
-          if (isTransient(res.status) && attempt < retries) { lastError = err; await sleep(500 * (attempt + 1)); continue; }
-          throw err;
-        }
-        return await res.json();
-      } catch (e) {
-        const status = e?.status || 0;
-        const transient = isTransient(status) || e?.name === 'AbortError' || e?.code === 'UND_ERR_CONNECT_TIMEOUT' || e?.type === 'network';
-        if (transient && attempt < retries) { lastError = e; await sleep(500 * (attempt + 1)); continue; }
-        throw e;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Cada intento tiene su PROPIO presupuesto de tiempo (si el 1º casi llega
+    // al límite, el retry no arrastra un signal ya abortado).
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        const err = new Error(extractError(res.status, text));
+        err.status = res.status;
+        if (isTransient(res.status) && attempt < retries) { lastError = err; await sleep(500 * (attempt + 1)); continue; }
+        throw err;
       }
+      return await res.json();
+    } catch (e) {
+      const status = e?.status || 0;
+      const transient = isTransient(status) || e?.name === 'AbortError' || e?.code === 'UND_ERR_CONNECT_TIMEOUT' || e?.type === 'network';
+      if (transient && attempt < retries) { lastError = e; await sleep(500 * (attempt + 1)); continue; }
+      throw e;
+    } finally {
+      clearTimeout(to);
     }
-    throw lastError || new Error('Gemini: agotados los reintentos.');
-  } finally {
-    clearTimeout(to);
   }
+  throw lastError || new Error('Gemini: agotados los reintentos.');
 }
 
 // Extrae el texto generado de forma ROBUSTA (omite parts "thought").

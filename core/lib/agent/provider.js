@@ -68,13 +68,20 @@ export function notAvailableMessage() {
 }
 
 // Normaliza tool_calls a nuestro formato interno.
+// Soporta: formato OpenAI (`function.arguments` en `message.tool_calls`) y el
+// formato interno (`c.arguments`, como devuelve geminiToolCalls). Si el valor
+// ya es un string NO se re-codifica (evita double-escape de los argumentos).
 function normalizeToolCalls(tcs = []) {
-  return tcs.map((c) => ({
-    id: c?.id || '',
-    type: c?.type || 'function',
-    name: c?.name || c?.function?.name || '',
-    arguments: typeof c?.arguments === 'string' ? c.arguments : JSON.stringify(c?.function?.arguments ?? c?.arguments ?? {}),
-  }));
+  return tcs.map((c) => {
+    const rawArgs = c?.function?.arguments ?? c?.arguments;
+    const argumentsStr = typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs ?? {});
+    return {
+      id: c?.id || '',
+      type: c?.type || 'function',
+      name: c?.name || c?.function?.name || '',
+      arguments: argumentsStr,
+    };
+  });
 }
 
 // ── Punto de entrada único ─────────────────────────────────────────
