@@ -39,7 +39,7 @@ test('construye single_select con categorías visibles y filas limitadas', () =>
     'Grupos',
   ]);
   assert.match(rows[0].description, /📥 .*14 comandos/);
-  assert.match(rows[4].description, /🏠 .*7 comandos/);
+  assert.match(rows[4].description, /🏠 .*10 comandos/);
 
   const content = buildNativeMenuContent({ body: 'elige', footer: 'fallback', wrapViewOnce: true });
   const interactive = content.viewOnceMessage.message.interactiveMessage;
