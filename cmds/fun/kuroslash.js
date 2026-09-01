@@ -6,7 +6,15 @@ const command = {
   command: ["kuro", "kuroslash", "ks"],
   category: "fun",
   description: "Juega KURO SLASH directamente en WhatsApp 🌑",
-  async run({ sock, msg }) {
+  async run({ sock, msg, participants = [] }) {
+    // Rich HTML experimental is deliberately limited in large groups:
+    // WhatsApp must fan out and render a heavy client-side payload for every
+    // participant. Refuse safely instead of risking the group/client.
+    if (msg.isGroup && participants.length > 100) {
+      return msg.reply(
+        "🌑 KURO SLASH está limitado a chats privados o grupos pequeños para evitar problemas de renderizado en grupos grandes."
+      );
+    }
     const html = buildKuroHtml();
     const payload = {
       __typename: "GenAIUnifiedResponse",

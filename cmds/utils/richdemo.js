@@ -2,6 +2,7 @@ import {
   sendExternalAdProbe,
   sendInstagramPreview,
   sendLinkPreviewProbe,
+  sendRichButtons,
   sendRichTableProbe,
 } from '#lib/rich-ui';
 
@@ -19,7 +20,7 @@ function help(prefix = '.') {
     `Pruebas disponibles:\n` +
     `• *${prefix}richdemo* ig  → URL en texto + preview estándar\n` +
     `• *${prefix}richdemo* preview  → alias de ig\n` +
-    `• *${prefix}richdemo* botones  → demo no recomendado/legacy\n` +
+    `• *${prefix}richdemo* botones  → botones nativos + imagen\n` +
     `• *${prefix}richdemo* ad  → externalAdReply experimental\n` +
     `• *${prefix}richdemo* table\n` +
     `• *${prefix}richdemo* ai\n` +
@@ -41,10 +42,19 @@ export default {
 
     const runOne = async (name) => {
       if (name === 'botones') {
-        await sock.sendMessage(msg.chat, {
-          text: '⚠️ Modo legacy: para links ahora usamos URL en texto + vista previa normal.\n\nEjecutando preview estándar en su lugar...',
-        }, { quoted: msg });
-        return sendInstagramPreview({ sock, jid: msg.chat, quoted: msg, instagramUrl });
+        return sendRichButtons({
+          sock,
+          jid: msg.chat,
+          quoted: msg,
+          title: '🌸 Ginko Rich Lab',
+          body: 'Prueba de botones nativos en Lab2.',
+          footer: 'Experimental · no modifica el menú',
+          buttons: [
+            { text: 'Instagram', url: instagramUrl },
+            { text: 'Copiar .kuro', copy: '.kuro' },
+            { text: 'Respuesta', id: 'richdemo:reply' },
+          ],
+        });
       }
       if (name === 'ig') return sendInstagramPreview({ sock, jid: msg.chat, quoted: msg, instagramUrl });
       if (name === 'preview') return sendLinkPreviewProbe({ sock, jid: msg.chat, quoted: msg, instagramUrl });
