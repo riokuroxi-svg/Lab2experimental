@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { generateWAMessageFromContent } from "baileys";
-import { buildKuroHtml } from "#lib/kuro/html.js";
+import { buildKuroHtml } from "#lib/kuro/html";
 
 const command = {
   command: ["kuro", "kuroslash", "ks"],
