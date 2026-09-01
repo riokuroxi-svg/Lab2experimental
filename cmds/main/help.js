@@ -45,7 +45,7 @@ const menuCommand = {
   command: ['allmenu', 'help', 'menu', 'ayuda', 'menumanual'],
   category: 'main',
   description: 'Ver el menú de comandos.',
-  run: async ({ msg, sock, args, usedPrefix }) => {
+  run: async ({ msg, sock, args, usedPrefix, command }) => {
     try {
       const now = new Date();
       const nowMx = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
