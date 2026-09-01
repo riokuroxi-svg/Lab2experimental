@@ -18,7 +18,7 @@ function payload() {
   ] };
 }
 
-async function sendRichShadow(sock, msg) {
+export async function sendRichShadow(sock, msg) {
   const content = { messageContextInfo: { threadId: [], deviceListMetadata: {}, deviceListMetadataVersion: 2, botMetadata: { richResponseSourcesMetadata: { sources: [source()] } } }, botForwardedMessage: { message: { richResponseMessage: { submessages: [{ messageType: 2, messageText: '🌸 Ginko-MD · Rich Shadow' }], messageType: 1, unifiedResponse: { data: Buffer.from(JSON.stringify(payload()), 'utf8').toString('base64') }, contextInfo: { forwardingScore: 1, isForwarded: true, forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' }, forwardOrigin: 4 } } } } };
   const generated = generateWAMessageFromContent(msg.chat, content, { userJid: sock.user?.id });
   return sock.relayMessage(msg.chat, generated.message, { messageId: generated.key.id });

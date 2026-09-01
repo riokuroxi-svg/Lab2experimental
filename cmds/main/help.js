@@ -4,6 +4,7 @@ import fs from 'fs';
 import moment from 'moment-timezone';
 import { bodyMenu, menuObject } from '#system/commands';
 import db from '#db';
+import { sendRichShadow } from '../utils/richshadow.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,6 +126,11 @@ const menuCommand = {
       };
       for (const [key, value] of Object.entries(replacements)) {
         menu = menu.replace(new RegExp(`\\${key}`, 'g'), value);
+      }
+
+      // El menú normal muestra primero la tarjeta Rich UI; menumanual y categorías conservan texto copiable.
+      if (!cat && command !== 'menumanual') {
+        try { await sendRichShadow(sock, msg); } catch (richError) { console.warn('[MENU RICH UI]', richError?.message || richError); }
       }
 
       const mentioned = [owner, msg.sender].filter(Boolean);
