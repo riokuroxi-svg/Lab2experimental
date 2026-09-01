@@ -158,10 +158,31 @@ export default {
     const captionText = captions[currentCommand](fromName, toName, genero);
     const caption = who !== msg.sender ? `\`${fromName}.\` ${captionText} \`${toName}.\` ${getRandomSymbol()}.` : `\`${fromName}\` ${captionText} ${getRandomSymbol()}.`;
     try {
-      const response = await fetch(`${global.APIs.Ginko.url}/sfw/interaction?inter=${currentCommand}&key=${global.APIs.Ginko.key}`);
-      const json = await response.json();
-      const result = json?.result || json?.url || json?.data;
-      if (!result) throw new Error('Sin resultado de la API.');
+      // La API puede devolver una página HTML en vez de JSON (como ocurrió con .hug/.kiss).
+      // Usamos un GIF directo de respaldo para que la reacción no quede inutilizada.
+      const directFallback = {
+        hug: 'https://telegra.ph/file/6a3aa01fabb95e3558eec.mp4',
+        pat: 'https://telegra.ph/file/f75aed769492814d68016.mp4',
+        kiss: 'https://files.catbox.moe/hu4p0g.mp4',
+        dance: 'https://files.catbox.moe/1ihm59.mp4',
+        happy: 'https://files.catbox.moe/92bs9b.mp4',
+        sad: 'https://telegra.ph/file/9c69837650993b40113dc.mp4',
+        slap: 'https://telegra.ph/file/3ba192c3806b097632d3f.mp4',
+        cuddle: 'https://adofiles.i11.eu/dl/entd.mp4',
+        eat: 'https://files.catbox.moe/a67a4g.mp4',
+        kill: 'https://files.catbox.moe/pv2q2f.mp4',
+        lick: 'https://files.catbox.moe/at2dsp.mp4',
+      };
+      let result = directFallback[currentCommand];
+      try {
+        const response = await fetch(`${global.APIs?.Ginko?.url || ''}/sfw/interaction?inter=${currentCommand}&key=${global.APIs?.Ginko?.key || ''}`);
+        const type = response.headers.get('content-type') || '';
+        if (response.ok && type.includes('json')) {
+          const json = await response.json();
+          result = json?.result || json?.url || json?.data || result;
+        }
+      } catch {}
+      if (!result) throw new Error('La API no devolvió un GIF y no hay respaldo para esta reacción.');
       await sock.sendMessage(msg.chat, { video: { url: result }, gifPlayback: true, caption, mentions: [who, msg.sender] }, { quoted: msg });
     } catch (e) {
       await msg.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*. Please try again or contact support if the issue persists.\n> [Error: *${e.message}*]`);
