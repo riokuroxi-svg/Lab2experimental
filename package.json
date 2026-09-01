@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@vitalets/google-translate-api": "9.2.1",
+    "adm-zip": "^0.6.0",
     "aptoide-scraper": "github:DIEGO-OFC/dv-aptoide-scraper",
     "axios": "^1.20.0",
     "baileys": "github:this-xys/WaSocket#41ce95870eb3c78d038ad9055705d270052cdfe2",
@@ -54,6 +55,7 @@
     "jimp": "1.6.1",
     "link-preview-js": "^5.0.0",
     "lodash": "4.18.1",
+    "mime-types": "^3.0.2",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.37",
     "node-cache": "5.1.2",
